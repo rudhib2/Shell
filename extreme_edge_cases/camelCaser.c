@@ -95,7 +95,11 @@ char **camel_caser(const char *input_str) {
             arr1[end - start] = '\0';
             arr[x] = arr1;
             x++;
-            start = end + 2;
+            if (!isspace(input_str[i+1])){
+                start = end+1;
+            } else{
+                start = end + 2;
+            }
         }
     }
     // printf("g");
