@@ -25,3 +25,6 @@ char **camel_caser(const char *input_str);
  * @param result - The output from camel_caser() to be freed
  */
 void destroy(char **result);
+char* toLower(char* str);
+char* capsAfterSpace(char* str);
+char* removeSpaces(char* str);
