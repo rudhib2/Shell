@@ -18,6 +18,10 @@
 
 
 void destroy(char **result) {
+    if(result == NULL) {
+        return;
+    }
+
     for(size_t i = 0; result[i] != NULL; ++i) {
         free(result[i]);
     }
