@@ -70,6 +70,23 @@ int test_camelCaser(char **(*camelCaser)(const char *),
         printf("%s\n", output8[i]);
     }
     destroy(output8);
+
+
+    const char *input9 = "r!";
+    char **output9 = camelCaser(input9);
+    for (int i = 0; output9[i] != NULL; ++i) { 
+        printf("%s\n", output9[i]);
+    }
+    destroy(output9);
+
+    const char *input10 = "R!";
+    char **output10 = camelCaser(input10);
+    for (int i = 0; output10[i] != NULL; ++i) { 
+        printf("%s\n", output10[i]);
+    }
+    destroy(output10);
+
     // Add more test cases if needed
     return 1;
+
 }
