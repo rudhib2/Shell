@@ -262,20 +262,13 @@ int test_camelCaser(char **(*camelCaser)(const char *),
     printf("test ten is complete\n");
     destroy(output10);
 
-    // const char *input11 = "";
-    // char **output11 = camelCaser(input11);
-    // if (strcmp(output11[0], "")) {
-    //     return 0;
-    // }
-    //  printf("test eleven is complete\n");
-    // destroy(output11);
-
-    // const char *input11 = "";
-    // char **output11 = camelCaser(input11);
-    // for (int i = 0; output11[i] != NULL; ++i) { 
-    //     printf("%s\n", output11[i]);
-    // }
-    // destroy(output11);
+    const char *input11 = "";
+    char **output11 = camelCaser(input11);
+    if(output11[0] != NULL) {
+        return 0;
+    }
+     printf("test eleven is complete\n");
+    destroy(output11);
 
     const char *input12 = NULL;
     char **output12 = camelCaser(input12);
@@ -284,6 +277,41 @@ int test_camelCaser(char **(*camelCaser)(const char *),
     }
     printf("test twelve is complete\n");
     destroy(output12);
+
+    const char *input13 = ".";
+    char **output13 = camelCaser(input13);
+    if (strcmp(output13[0], "")) {
+        return 0;
+    }
+    if(output13[1] != NULL) {
+        return 0;
+    }
+    printf("test thirteen is complete\n");
+    destroy(output13);
+
+    const char *input14 = "123abc. hi789.";
+    char **output14 = camelCaser(input14);
+    if (strcmp(output14[0], "123abc")) {
+        return 0;
+    }
+    if (strcmp(output14[1], "hi789")) {
+        return 0;
+    }
+    if(output14[2] != NULL) {
+        return 0;
+    }
+    printf("test fourteen is complete\n");
+    destroy(output14);
+
+
+    const char *input15 = "123";
+    char **output15 = camelCaser(input15);
+
+    if(output15[0] != NULL) {
+        return 0;
+    }
+    printf("test fifteen is complete\n");
+    destroy(output15);
 
 
     return 1;
