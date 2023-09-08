@@ -6,6 +6,7 @@
 #include "callbacks.h"
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /**
  * A C style implementation of std::vector

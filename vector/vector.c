@@ -95,18 +95,24 @@ vector *vector_create(copy_constructor_type copy_constructor,
     // (void)INITIAL_CAPACITY;
     // (void)get_new_capacity;
 
-    assert(copy_constructor != NULL);
-    assert(destructor != NULL);
-    assert(default_constructor != NULL);
+    // assert(copy_constructor != NULL);
+    // assert(destructor != NULL);
+    // assert(default_constructor != NULL);
 
     vector *elem;
-    elem = (vector*) calloc(INITIAL_CAPACITY, INITIAL_CAPACITY * sizeof(vector));
-    elem->copy_constructor = copy_constructor;
-    elem->destructor = destructor;
-    elem->default_constructor = default_constructor;
+    elem = (vector*) calloc(1, sizeof(vector));
+    if(copy_constructor == NULL && destructor == NULL && default_constructor == NULL) {
+        elem->copy_constructor = shallow_copy_constructor;
+        elem->destructor = shallow_destructor;
+        elem->default_constructor = shallow_default_constructor;
+    } else {
+        elem->copy_constructor = copy_constructor;
+        elem->destructor = destructor;
+        elem->default_constructor = default_constructor;
+    }
     elem->size = 0;
     elem->capacity = INITIAL_CAPACITY;
-    elem->array = (void **) calloc(INITIAL_CAPACITY, INITIAL_CAPACITY * sizeof(void*));
+    elem->array = (void **) calloc(INITIAL_CAPACITY, sizeof(void*));
 
     return elem;
 }
@@ -118,6 +124,7 @@ void vector_destroy(vector *this) {
     for (size_t i = 0; i < this->size; ++i) {
         this->destructor(this->array[i]);
     }
+    this->size = 0;
     free(this);
     this = NULL;
 }
@@ -139,12 +146,13 @@ size_t vector_size(vector *this) {
 
 void vector_resize(vector *this, size_t n) {
     assert(this);
-    assert(n);
+    // assert(n);
     // your code here
 
     if(n < this->size) {
         for (size_t i = n; i <= this->size; ++i) {
             this->destructor(this->array[i]);
+            // this->array[i] = NULL;
         }
     } else if (n > this->size && this->size <= this->capacity) {
         for (size_t i = this->size; i < n; ++i) {
@@ -197,12 +205,12 @@ void **vector_at(vector *this, size_t position) {
 
 void vector_set(vector *this, size_t position, void *element) {
     assert(this);
-    assert(position);
-    assert(element);
+    // assert(position);
+    // assert(element);
     // your code here
 
     this->destructor(this->array[position]);
-    this->array[position] = element;
+    this->array[position] = this->copy_constructor(element);
 }
 
 void *vector_get(vector *this, size_t position) {
@@ -211,6 +219,7 @@ void *vector_get(vector *this, size_t position) {
 
     // your code here
     return this->array[position];
+   
 }
 
 void **vector_front(vector *this) {
@@ -224,15 +233,15 @@ void **vector_back(vector *this) {
 
 void vector_push_back(vector *this, void *element) {
     assert(this);
-    assert(element);
+    // assert(element);
     // your code here
     if(this->size+1 <= this->capacity) {
-        this->array[this->size + 1] = element;
+        this->array[this->size] = this->copy_constructor(element);
         this->size = this->size+1;
     } else {
         //change the capacity
         vector_reserve(this, this->size + 1); 
-        this->array[this->size + 1] = element;
+        this->array[this->size] = this->copy_constructor(element);
         this->size = this->size+1;
     }
 }
@@ -240,46 +249,28 @@ void vector_push_back(vector *this, void *element) {
 void vector_pop_back(vector *this) {
     assert(this);
     // your code here
-
     this->destructor(this->array[(this->size-1)]);
     this->array[(this->size-1)] = NULL;
     this->size = this->size-1;
 }
 
-/**
- * The 'vector' is extended by inserting a new 'element' before the element at
- * the specified 'position', effectively increasing the container size by 1.
- *
- * This causes an automatic reallocation of the allocated storage space if -and
- * only if- the new 'vector' 'size' surpasses the current 'vector' 'capacity'.
- *
- * Because vectors use an array as their underlying storage, inserting elements
- * in positions other than the vector end causes the container to relocate all
- * the elements that were after position to their new positions.  This is
- * generally an inefficient operation compared to the one performed for the same
- * operation by other kinds of sequence containers (such as list or
- * forward_list).
- *
- * http://www.cplusplus.com/reference/vector/vector/insert/
- */
-
 void vector_insert(vector *this, size_t position, void *element) {
     assert(this);
-    assert(position != 0);
-    assert(element);
+    // assert(position != 0);
+    // assert(element);
     // your code here
     
     if (this->size + 1 <= this->capacity) {
         for (size_t i = position; i < this->size+1; ++i) {
             this->array[i + 1] = this->array[i];
         }
-        this->array[position] = element;
+        this->array[position] = this->copy_constructor(element);
     } else if (this->size + 1 > this->capacity) {
         vector_reserve(this, this->size + 1);
         for (size_t i = position; i < this->size+1; ++i) {
             this->array[i + 1] = this->array[i];
         }
-        this->array[position] = element;
+        this->array[position] = this->copy_constructor(element);
     }
     this->size = this->size + 1;
 }
@@ -290,20 +281,19 @@ void vector_erase(vector *this, size_t position) {
     assert(position < vector_size(this));
     // your code here
 
-    this->destructor(this->array[position]);
+    // this->destructor(this->array[position]);
     for (size_t i = position; i < this->size; ++i) {
         if(i == this->size - 1) {
             break;
         } else {
-            this->array[i] = this->array[i+1];
+            this->array[i] = this->copy_constructor(this->array[i+1]);
         }
     }
+    this->destructor(this->array[this->size - 1]);
     this->size = this->size - 1;
-
 }
 
 void vector_clear(vector *this) {
-    assert(this);
     // your code here
 
     for (size_t i = 0; i < this->size; ++i) {
