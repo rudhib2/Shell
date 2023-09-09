@@ -144,24 +144,45 @@ size_t vector_size(vector *this) {
 }
 
 
+/**
+ * Resizes the container so that it contains 'n' elements.
+ *
+ * If 'n' is smaller than the current container size,
+ * the content is reduced to its first n elements,
+ * removing those beyond (and destroying them).
+ *
+ * If 'n' is greater than the current container size, the content is expanded by
+ * inserting at the end as many elements as needed to reach a size of n.  These
+ * new elements are created using the user defined default-constructor.
+ *
+ * If 'n' is also greater than the current container capacity,
+ * an automatic reallocation of the allocated storage space takes place.
+ *
+ * Notice that this function changes the actual content of the container by
+ * inserting or erasing elements from it.
+ *
+ * http://www.cplusplus.com/reference/vector/vector/resize/
+ */
+
 void vector_resize(vector *this, size_t n) {
     assert(this);
     // assert(n);
     // your code here
 
     if(n < this->size) {
-        for (size_t i = n; i <= this->size; ++i) {
+        for (size_t i = n; i <= this->size - 1; ++i) {
             this->destructor(this->array[i]);
             // this->array[i] = NULL;
         }
-    } else if (n > this->size && this->size <= this->capacity) {
+    } else if (n > this->size && n <= this->capacity) {
         for (size_t i = this->size; i < n; ++i) {
-            this->array[i] = this->default_constructor;
+            // this->array[i] = this->default_constructor;
+            this->array[i] = (this->default_constructor)();
         }
-    } else if (n > this->size && this->size > this->capacity) {
+    } else if (n > this->size && n > this->capacity) {
         vector_reserve(this, n);
         for (size_t i = this->size; i < n; ++i) {
-            this->array[i] = this->default_constructor;
+            this->array[i] = (this->default_constructor)();
         }
     }
     this->size = n;

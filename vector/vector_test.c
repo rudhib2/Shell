@@ -6,16 +6,16 @@
 #include "vector.h"
 int main(int argc, char *argv[]) {
     // Write your test cases here
-    printf("jjoooffo");
+
     vector *test = int_vector_create();
     int x = 1;
     int y = 2;
     int z = 3;
     if(test){
-        printf("lo");
+        printf("vector exists\n");
     }
     // //int *y = x;
-    printf("jjooooppppp\n");
+    
     vector_push_back(test, &x);
     vector_push_back(test, &y);
     vector_push_back(test, &z);
@@ -24,9 +24,9 @@ int main(int argc, char *argv[]) {
     //     int* r =vector_get(test,i);
     //     printf("%d\n", *r);
     // }
-    printf("helooo\n");
+    
     vector_pop_back(test);
-    printf("size is %zu\n", vector_size(test));
+    printf("size after pop back is %zu\n", vector_size(test));
     for (int i = 0; i < 2; ++i) {
         int* r =vector_get(test,i);
         printf("%d\n", *r);
@@ -35,7 +35,6 @@ int main(int argc, char *argv[]) {
     int c = 4;
     int *d = &c;
 
-    printf("at line 35\n");
     vector_insert(test, 1, d);
     for (int i = 0; i < 3; ++i) {
         int* r =vector_get(test,i);
@@ -43,19 +42,19 @@ int main(int argc, char *argv[]) {
     }
 
     size_t s = vector_size(test);
-    printf("%zu\n", s);
+    printf("Size of test is %zu\n", s);
 
     size_t cap = vector_capacity(test);
-    printf("%zu\n", cap);
+    printf("Capacity of test is %zu\n", cap);
 
     bool bo = vector_empty(test);
-    printf("%d\n", bo);
+    printf("Answer for isempty is: %d\n", bo);
 
     vector_reserve(test, 10);
     size_t capi = vector_capacity(test);
-    printf("%zu\n", capi);
+    printf("Capacity after reserving to 10 is: %zu\n", capi);
 
-    vector_erase(test, 1);
+    vector_erase(test, 0);
     for (int i = 0; i < 2; ++i) {
         int* r =vector_get(test,i);
         printf("The element is %d\n", *r);
@@ -84,4 +83,54 @@ int main(int argc, char *argv[]) {
     // }
 
     // return 0;
+
+    vector *test2 = int_vector_create();
+    int x2 = 54;
+    int y2 = 28;
+    int z2 = 39;
+    int a2 = 67;
+    int e2 = 98;
+    int f2 = 101;
+    int j2 = 105;
+    
+    vector_push_back(test2, &x2);
+    vector_push_back(test2, &y2);
+    vector_push_back(test2, &z2);
+    vector_push_back(test2, &a2);
+    vector_push_back(test2, &e2);
+    vector_push_back(test2, &f2);
+    vector_push_back(test2, &j2);
+
+    vector_resize(test2, 5);
+
+    for (int i = 0; i < 5; ++i) {
+        int* r =vector_get(test2,i);
+        printf("The elements of test2 are: %d\n", *r);
+    }
+
+    size_t size = vector_size(test2);
+    printf("Size after resize smaller is:%zu\n", size);
+
+    size_t cap2 = vector_capacity(test2);
+    printf("Capacity of test2 is:%zu\n", cap2);
+
+    vector_resize(test2, 10);
+    for (int i = 0; i < 10; ++i) {
+        int* r =vector_get(test2,i);
+        printf("The elements of test2 are: %d\n", *r);
+    }
+
+    size_t cap3 = vector_capacity(test2);
+    printf("Capacity of test2 is:%zu\n", cap3);
+
+    vector_erase(test2, 3);
+    for (int i = 0; i < 9; ++i) {
+        int* r =vector_get(test2,i);
+        printf("The element is %d\n", *r);
+    }
+
+    vector_clear(test2);
+    size_t size2 = vector_size(test2);
+    printf("Size after clear is:%zu\n", size2);
+
 }
