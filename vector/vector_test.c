@@ -133,4 +133,16 @@ int main(int argc, char *argv[]) {
     size_t size2 = vector_size(test2);
     printf("Size after clear is:%zu\n", size2);
 
+    vector_reserve(test2, 10000000000000);
+    size_t cap4 = vector_capacity(test2);
+    printf("Capacity should be 10000000000000:%zu\n", cap4);
+
+    vector_reserve(test2, 2);
+    size_t cap5 = vector_capacity(test2);
+    printf("Capacity should be 2:%zu\n", cap5);
+
+    vector_reserve(test2, 10000000000000);
+    size_t cap6 = vector_capacity(test2);
+    printf("Capacity should be 2:%zu\n", cap6);
+
 }

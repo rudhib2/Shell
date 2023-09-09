@@ -210,9 +210,9 @@ void vector_reserve(vector *this, size_t n) {
     // your code here
 
     if(n > this->capacity) {
-        int new_capacity = get_new_capacity(n);
-        this->array = realloc(this->array, new_capacity * sizeof(void *));
-        this->capacity = n;
+        // int new_capacity = get_new_capacity(n);
+        this->array = realloc(this->array, get_new_capacity(n) * sizeof(void *));
+        this->capacity = get_new_capacity(n);
     }
 }
 
