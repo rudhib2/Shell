@@ -145,4 +145,28 @@ int main(int argc, char *argv[]) {
     size_t cap6 = vector_capacity(test2);
     printf("Capacity should be 2:%zu\n", cap6);
 
+
+    vector *test4 = int_vector_create();
+    int x3 = 20;
+    int y3 = 21;
+    int z3 = 22;
+    int x4 = 23;
+    int y4 = 24;
+    int z4 = 25;
+    int z5 = 5;
+    
+    vector_push_back(test4, &x3);
+    vector_push_back(test4, &y3);
+    vector_push_back(test4, &z3);
+    vector_push_back(test4, &x4);
+    vector_push_back(test4, &y4);
+    vector_push_back(test4, &z4);
+
+    vector_insert(test4, 3, &z5);
+
+    for (int i = 0; i < 7; ++i) {
+        int* r =vector_get(test4,i);
+        printf("The element is %d\n", *r);
+    }
+
 }

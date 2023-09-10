@@ -282,8 +282,8 @@ void vector_insert(vector *this, size_t position, void *element) {
     // your code here
     
     if (this->size + 1 <= this->capacity) {
-        for (size_t i = position; i < this->size+1; ++i) {
-            this->array[i + 1] = this->array[i];
+        for (size_t i = this->size; i > position; --i) {
+            this->array[i] = this->array[i-1];
         }
         this->array[position] = this->copy_constructor(element);
     } else if (this->size + 1 > this->capacity) {
