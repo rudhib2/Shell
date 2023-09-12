@@ -3,6 +3,7 @@
  * CS 341 - Fall 2023
  */
 #include "sstring.h"
+#include <string.h>
 
 int main(int argc, char *argv[]) {
     // TODO create some tests
@@ -35,8 +36,10 @@ int main(int argc, char *argv[]) {
     for (size_t i = 0; i < 3; ++i) {
         printf("%s\n", (char*) vector_get(toprint, i));
     }
-    
+   
   // == [ "This", "is", "a", "sentence." ]
-    
+
+  // printf("here hsbhs");
+  
     return 0;
 }
