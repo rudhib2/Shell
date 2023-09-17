@@ -24,6 +24,81 @@ typedef struct process {
     pid_t pid;
 } process;
 
+int execute_command(char* command) {
+    int status;
+    pid_t new_pid = fork();
+
+    if (new_pid == 0) {
+        if (strcmp(command, "") != 0) {
+            char* token = strtok(command, " ");
+            char* args[100];
+            int i = 0;
+            while (token != NULL) {
+                args[i++] = token;
+                token = strtok(NULL, " ");
+            }
+            args[i] = NULL;
+            execvp(args[0], args);
+            perror("execvp failed");
+            exit(0);
+        }
+    } else if (new_pid > 0) {
+        waitpid(new_pid, &status, 0);
+        return WEXITSTATUS(status);
+    } else {
+        print_fork_failed();
+        return -1;
+    }
+
+    return 0;
+}
+
+int execute_logical_command(char* logical_command) {
+    char* token;
+    char* command1;
+    char* command2;
+    int operator_type; // 0 for ;, 1 for &&, 2 for ||
+    
+    // Check for logical operators and split the command
+    if ((token = strstr(logical_command, "&&"))) {
+        operator_type = 1;
+        command1 = strtok(logical_command, "&&");
+        command2 = token + 2; // Move to the characters after '&&'
+    } else if ((token = strstr(logical_command, "||"))) {
+        operator_type = 2;
+        command1 = strtok(logical_command, "||");
+        command2 = token + 2; // Move to the characters after '||'
+    } else {
+        operator_type = 0;
+        token = strstr(logical_command, ";");
+        command1 = strtok(logical_command, ";");
+        command2 = token + 2;
+    }
+
+    // Execute the first command
+    int status1 = execute_command(command1);
+
+    if (operator_type == 1) { // Logical AND (&&)
+        // Execute the second command only if the first one succeeded
+        if (status1 == 0) {
+            execute_command(command2);
+        }
+    } else if (operator_type == 2) { // Logical OR (||)
+        // Execute the second command only if the first one failed
+        if (status1 != 0) {
+            execute_command(command2);
+        }
+    } else { // Separator (;)
+        // Execute the second command unconditionally
+        if (command2 != NULL) {
+            execute_command(command2);
+        }
+    }
+
+    return status1;
+}
+
+
 void execute_script(const char* filename) {
     FILE *script_file = fopen(filename, "r");
     if (script_file == NULL) {
@@ -64,78 +139,6 @@ void execute_script(const char* filename) {
     }
     fclose(script_file);
 }
-
-void execute_command(const char* command) {
-    // Create a copy of the command string that can be modified
-    char command_copy[MAX_INPUT_SIZE];
-    strcpy(command_copy, command);
-
-    char* token = strtok(command_copy, " ");
-    char* args[100];
-    int i = 0;
-    
-    while (token != NULL) {
-        args[i++] = token;
-        token = strtok(NULL, " ");
-    }
-    args[i] = NULL;
-
-    // Execute the command
-    execvp(args[0], args);
-    perror("execvp failed");
-    exit(1);
-}
-
-
-// Function to parse and execute commands with logical operators
-void execute_logical_command(const char* command) {
-    char* and_token = strstr(command, "&&");
-    char* or_token = strstr(command, "||");
-    char* seq_token = strstr(command, ";");
-
-    if (and_token) {
-        *and_token = '\0';
-        int status;
-        pid_t new_pid = fork();
-
-        if (new_pid == 0) {
-            execute_command(command);
-            exit(0);
-        } else if (new_pid > 0) {
-            waitpid(new_pid, &status, 0);
-            if (status == 0) {
-                execute_logical_command(and_token + 2);
-            }
-        } else {
-            print_fork_failed();
-            exit(1);
-        }
-    } else if (or_token) { // Handle ||
-        *or_token = '\0';
-        int status;
-        pid_t new_pid = fork();
-
-        if (new_pid == 0) {
-            execute_command(command);
-            exit(0);
-        } else if (new_pid > 0) {
-            waitpid(new_pid, &status, 0);
-            if (status != 0) {
-                execute_logical_command(or_token + 2);
-            }
-        } else {
-            print_fork_failed();
-            exit(1);
-        }
-    } else if (seq_token) { // Handle ;
-        *seq_token = '\0';
-        execute_command(command);
-        execute_logical_command(seq_token + 1);
-    } else {
-        execute_command(command);
-    }
-}
-
 
 
 int shell(int argc, char *argv[]) {
@@ -185,39 +188,18 @@ int shell(int argc, char *argv[]) {
         }
 
         int status;
-        pid_t new_pid = fork();
 
-        if (new_pid > 0) {
-            waitpid(new_pid, &status, 0);
-        } else if (new_pid == 0) {
-            if (strcmp(written_in_terminal, "") != 0) {
-                char* token = strtok(written_in_terminal, " ");
-                char* args[100];
-                int i = 0;
-                while (token != NULL) {
-                    args[i++] = token;
-                    token = strtok(NULL, " ");
-                }
-                args[i] = NULL;
-                if (!(strstr(written_in_terminal, "&&") || strstr(written_in_terminal, "||") || strstr(written_in_terminal, ";"))) {
-                    execvp(args[0], args);
-                    perror("execvp failed");
-                    exit(0);
-                }
-                
-            }
-        } else {
-            // perror("fork failed");
-            print_fork_failed();
-            exit(0);
-        }
         if (strstr(written_in_terminal, "&&") || strstr(written_in_terminal, "||") || strstr(written_in_terminal, ";")) {
-            execute_logical_command(written_in_terminal);
+            status = execute_logical_command(written_in_terminal);
+        } else {
+            status = execute_command(written_in_terminal);
         }
-        // execute_logical_command(written_in_terminal);
 
+        if (status != 0) {
+            perror("error");
+            exit(1);
+        }
 
-        // Write the command to history file if the -h flag is set
         if (history_flag) {
             fprintf(history_file, "\n%s", written_in_terminal);
             fflush(history_file);
