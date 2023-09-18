@@ -14,8 +14,11 @@
 #include "vector.h"
 #include <stdlib.h>
 #include <sys/types.h>
+#include <errno.h>
+#include <signal.h>
 
 #define MAX_INPUT_SIZE 100
+static pid_t foreground_pid = 0;
 // extern char *optarg;
 
 
@@ -24,24 +27,52 @@ typedef struct process {
     pid_t pid;
 } process;
 
+
+
+
+// Signal handler for SIGINT (Ctrl+C)
+void sigint_handler(int signo) {
+    if (foreground_pid > 0) {
+        // Forward SIGINT to the foreground process group
+        kill(-foreground_pid, SIGINT);
+    }
+}
+int change_directory(const char* path) {
+    if (chdir(path) != 0) {
+        if (errno == ENOENT) {
+            // Directory does not exist
+            fprintf(stderr, "%s: No such file or directory\n", path);
+        } else {
+            // Other error occurred
+            perror("cd");
+        }
+        // return -1;
+    }
+    return 0;
+}
+
 int execute_command(char* command) {
+    if (strcmp(command, "") == 0) {
+        return 0;  // Empty command
+    } else if (strncmp(command, "cd ", 3) == 0) {
+        return change_directory(command + 3); // +3 to skip "cd "
+    }
+
     int status;
     pid_t new_pid = fork();
 
     if (new_pid == 0) {
-        if (strcmp(command, "") != 0) {
-            char* token = strtok(command, " ");
-            char* args[100];
-            int i = 0;
-            while (token != NULL) {
-                args[i++] = token;
-                token = strtok(NULL, " ");
-            }
-            args[i] = NULL;
-            execvp(args[0], args);
-            perror("execvp failed");
-            exit(0);
+        char* token = strtok(command, " ");
+        char* args[100];
+        int i = 0;
+        while (token != NULL) {
+            args[i++] = token;
+            token = strtok(NULL, " ");
         }
+        args[i] = NULL;
+        execvp(args[0], args);
+        perror("execvp failed");
+        exit(0);
     } else if (new_pid > 0) {
         waitpid(new_pid, &status, 0);
         return WEXITSTATUS(status);
@@ -49,9 +80,11 @@ int execute_command(char* command) {
         print_fork_failed();
         return -1;
     }
-
     return 0;
 }
+
+
+
 
 int execute_logical_command(char* logical_command) {
     char* token;
@@ -142,6 +175,7 @@ void execute_script(const char* filename) {
 
 
 int shell(int argc, char *argv[]) {
+    signal(SIGINT, sigint_handler);
     char curr_dir[MAX_INPUT_SIZE];
     char written_in_terminal[MAX_INPUT_SIZE];
     pid_t pid = getpid();
@@ -177,9 +211,26 @@ int shell(int argc, char *argv[]) {
 
     while(1) {
         print_prompt(getcwd(curr_dir, sizeof(curr_dir)), pid);
-        fgets(written_in_terminal, sizeof(written_in_terminal), stdin);
-        written_in_terminal[strlen(written_in_terminal) - 1] = '\0';
+    
+        if (fgets(written_in_terminal, sizeof(written_in_terminal), stdin) == NULL) {
+            // Check for EOF (Ctrl+D)
+            if (feof(stdin)) {
+                // printf("\n");
+                break;  // Exit the loop on EOF
+            } else {
+                perror("fgets");
+                exit(1); // Handle other errors
+            }
+        }
+        
+        // Remove the newline character
+        char *newline = strchr(written_in_terminal, '\n');
+        if (newline) {
+            *newline = '\0';
+        }
 
+        // fgets(written_in_terminal, sizeof(written_in_terminal), stdin);
+        // written_in_terminal[strlen(written_in_terminal) - 1] = '\0';
         if (strcmp(written_in_terminal, "exit") == 0) {
             if (history_flag) {
                 fclose(history_file);
@@ -189,21 +240,22 @@ int shell(int argc, char *argv[]) {
 
         int status;
 
+        if (history_flag) {
+            fprintf(history_file, "\n%s", written_in_terminal);
+            fflush(history_file);
+        }
+
         if (strstr(written_in_terminal, "&&") || strstr(written_in_terminal, "||") || strstr(written_in_terminal, ";")) {
             status = execute_logical_command(written_in_terminal);
         } else {
             status = execute_command(written_in_terminal);
         }
-
-        if (status != 0) {
+         if (status != 0) {
             perror("error");
             exit(1);
         }
-
-        if (history_flag) {
-            fprintf(history_file, "\n%s", written_in_terminal);
-            fflush(history_file);
-        }
+        
     }
     return 0;
 }
+
