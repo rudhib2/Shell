@@ -19,6 +19,7 @@
 
 #define MAX_INPUT_SIZE 100
 static pid_t foreground_pid = 0;
+
 // extern char *optarg;
 
 
@@ -28,22 +29,16 @@ typedef struct process {
 } process;
 
 
-
-
-// Signal handler for SIGINT (Ctrl+C)
 void sigint_handler(int signo) {
     if (foreground_pid > 0) {
-        // Forward SIGINT to the foreground process group
         kill(-foreground_pid, SIGINT);
     }
 }
 int change_directory(const char* path) {
     if (chdir(path) != 0) {
         if (errno == ENOENT) {
-            // Directory does not exist
             fprintf(stderr, "%s: No such file or directory\n", path);
         } else {
-            // Other error occurred
             perror("cd");
         }
         // return -1;
@@ -71,7 +66,7 @@ int execute_command(char* command) {
         }
         args[i] = NULL;
         execvp(args[0], args);
-        perror("execvp failed");
+        // perror("execvp failed");
         exit(0);
     } else if (new_pid > 0) {
         waitpid(new_pid, &status, 0);
@@ -92,15 +87,14 @@ int execute_logical_command(char* logical_command) {
     char* command2;
     int operator_type; // 0 for ;, 1 for &&, 2 for ||
     
-    // Check for logical operators and split the command
     if ((token = strstr(logical_command, "&&"))) {
         operator_type = 1;
         command1 = strtok(logical_command, "&&");
-        command2 = token + 2; // Move to the characters after '&&'
+        command2 = token + 2; 
     } else if ((token = strstr(logical_command, "||"))) {
         operator_type = 2;
         command1 = strtok(logical_command, "||");
-        command2 = token + 2; // Move to the characters after '||'
+        command2 = token + 2; 
     } else {
         operator_type = 0;
         token = strstr(logical_command, ";");
@@ -108,26 +102,21 @@ int execute_logical_command(char* logical_command) {
         command2 = token + 2;
     }
 
-    // Execute the first command
     int status1 = execute_command(command1);
 
-    if (operator_type == 1) { // Logical AND (&&)
-        // Execute the second command only if the first one succeeded
+    if (operator_type == 1) {
         if (status1 == 0) {
             execute_command(command2);
         }
-    } else if (operator_type == 2) { // Logical OR (||)
-        // Execute the second command only if the first one failed
+    } else if (operator_type == 2) {
         if (status1 != 0) {
             execute_command(command2);
         }
-    } else { // Separator (;)
-        // Execute the second command unconditionally
+    } else {
         if (command2 != NULL) {
             execute_command(command2);
         }
     }
-
     return status1;
 }
 
@@ -175,6 +164,7 @@ void execute_script(const char* filename) {
 
 
 int shell(int argc, char *argv[]) {
+    vector *vect = string_vector_create();
     signal(SIGINT, sigint_handler);
     char curr_dir[MAX_INPUT_SIZE];
     char written_in_terminal[MAX_INPUT_SIZE];
@@ -213,24 +203,21 @@ int shell(int argc, char *argv[]) {
         print_prompt(getcwd(curr_dir, sizeof(curr_dir)), pid);
     
         if (fgets(written_in_terminal, sizeof(written_in_terminal), stdin) == NULL) {
-            // Check for EOF (Ctrl+D)
             if (feof(stdin)) {
-                // printf("\n");
-                break;  // Exit the loop on EOF
+                break;  
             } else {
                 perror("fgets");
-                exit(1); // Handle other errors
+                exit(1); 
             }
         }
         
-        // Remove the newline character
         char *newline = strchr(written_in_terminal, '\n');
         if (newline) {
             *newline = '\0';
         }
-
-        // fgets(written_in_terminal, sizeof(written_in_terminal), stdin);
-        // written_in_terminal[strlen(written_in_terminal) - 1] = '\0';
+        if (strcmp(written_in_terminal, "!history") != 0) {
+            vector_push_back(vect, written_in_terminal);
+        }
         if (strcmp(written_in_terminal, "exit") == 0) {
             if (history_flag) {
                 fclose(history_file);
@@ -254,8 +241,21 @@ int shell(int argc, char *argv[]) {
             perror("error");
             exit(1);
         }
+        if (strstr(written_in_terminal, "!history")) {
+            for (size_t i = 0 ; i < vector_size(vect); ++i) {
+                print_history_line(i, vector_get(vect, i));
+            }
+        }
+
+        if((strstr(written_in_terminal, "!history")) == NULL && (strstr(written_in_terminal, "echo")) == NULL && 
+        !strstr(written_in_terminal, "ls") && !strstr(written_in_terminal, "pwd") && !strstr(written_in_terminal, "cd ") && 
+        !strstr(written_in_terminal, "-f ") && !strstr(written_in_terminal, "-h ") && !strstr(written_in_terminal, "^C") &&
+        !strstr(written_in_terminal, "!") && !strstr(written_in_terminal, "#") && !strstr(written_in_terminal, "exit") && 
+        !strstr(written_in_terminal, "^D") && strcmp(written_in_terminal, "") && !strstr(written_in_terminal, "sleep")) {
+            print_invalid_command(written_in_terminal);
+        }
         
     }
+    vector_destroy(vect);
     return 0;
 }
-
