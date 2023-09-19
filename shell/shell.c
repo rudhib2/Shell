@@ -17,7 +17,7 @@
 #include <errno.h>
 #include <signal.h>
 
-#define MAX_INPUT_SIZE 100
+#define MAX_INPUT_SIZE 1024
 static pid_t foreground_pid = 0;
 
 // extern char *optarg;
@@ -210,7 +210,17 @@ int shell(int argc, char *argv[]) {
                 exit(1); 
             }
         }
-        
+        if (strstr(written_in_terminal, "#")) {
+        size_t num = atoi(written_in_terminal + 1);
+        if (num >= 0 && num < vector_size(vect)) {
+            char * command = (char*) vector_get(vect, num);
+            strcpy(written_in_terminal, command);
+            print_command(command);
+
+            } else {
+                print_invalid_index();
+            }
+        }
         char *newline = strchr(written_in_terminal, '\n');
         if (newline) {
             *newline = '\0';
@@ -228,8 +238,10 @@ int shell(int argc, char *argv[]) {
         int status;
 
         if (history_flag) {
-            fprintf(history_file, "\n%s", written_in_terminal);
-            fflush(history_file);
+            if (strcmp(written_in_terminal, "!history") != 0) {
+                fprintf(history_file, "\n%s", written_in_terminal);
+                fflush(history_file);
+            }
         }
 
         if (strstr(written_in_terminal, "&&") || strstr(written_in_terminal, "||") || strstr(written_in_terminal, ";")) {
@@ -247,13 +259,15 @@ int shell(int argc, char *argv[]) {
             }
         }
 
-        if((strstr(written_in_terminal, "!history")) == NULL && (strstr(written_in_terminal, "echo")) == NULL && 
-        !strstr(written_in_terminal, "ls") && !strstr(written_in_terminal, "pwd") && !strstr(written_in_terminal, "cd ") && 
-        !strstr(written_in_terminal, "-f ") && !strstr(written_in_terminal, "-h ") && !strstr(written_in_terminal, "^C") &&
-        !strstr(written_in_terminal, "!") && !strstr(written_in_terminal, "#") && !strstr(written_in_terminal, "exit") && 
-        !strstr(written_in_terminal, "^D") && strcmp(written_in_terminal, "") && !strstr(written_in_terminal, "sleep")) {
-            print_invalid_command(written_in_terminal);
-        }
+        // if((strstr(written_in_terminal, "!history")) == NULL && (strstr(written_in_terminal, "echo")) == NULL && 
+        // !strstr(written_in_terminal, "ls") && !strstr(written_in_terminal, "pwd") && !strstr(written_in_terminal, "cd ") && 
+        // !strstr(written_in_terminal, "-f ") && !strstr(written_in_terminal, "-h ") && !strstr(written_in_terminal, "^C") &&
+        // !strstr(written_in_terminal, "!") && !strstr(written_in_terminal, "#") && !strstr(written_in_terminal, "exit") && 
+        // !strstr(written_in_terminal, "^D") && strcmp(written_in_terminal, "") && !strstr(written_in_terminal, "sleep")) {
+        //     print_invalid_command(written_in_terminal);
+        // }
+
+        
         
     }
     vector_destroy(vect);
