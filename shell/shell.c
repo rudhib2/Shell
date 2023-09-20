@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <signal.h>
+#include <dirent.h>
 
 #define MAX_INPUT_SIZE 1024
 static pid_t foreground_pid = 0;
@@ -28,6 +29,19 @@ typedef struct process {
     pid_t pid;
 } process;
 
+
+
+#include "format.h"
+#include "shell.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <string.h>
+#include <sys/types.h>
+#include <dirent.h>
+
+#define MAX_INPUT_SIZE 1024
 
 void sigint_handler(int signo) {
     if (foreground_pid > 0) {
@@ -78,6 +92,30 @@ int execute_command(char* command) {
     return 0;
 }
 
+
+void execute_ps() {
+    print_process_info_header();
+
+    // Iterate through processes and print their information
+    // You can use your own logic to gather process information and populate process_info structs
+    // For example, you can use the /proc filesystem as demonstrated in the previous response.
+
+    // Example usage of process_info:
+    process_info pinfo;
+    pinfo.pid = getpid();
+    pinfo.nthreads = 1;
+    pinfo.vsize = 7328;
+    pinfo.state = 'R';
+    pinfo.start_str = "14:03";
+    pinfo.time_str = "0:08";
+    pinfo.command = "dd if=/dev/zero bs=1M count=123456 of=/dev/null &";
+
+    print_process_info(&pinfo);
+
+    // Repeat the above process_info printing for other processes
+
+    // You can gather information about other processes and print them here
+}
 
 
 
@@ -199,6 +237,13 @@ int shell(int argc, char *argv[]) {
         exit(0); // Exit after running the script
     }
 
+    // if (argc == 2 && strcmp(argv[1], "ps") == 0) {
+    //     printf("ANUSHK");
+    //     execute_ps();
+    //     printf("SNUSHKA");
+    //     return 0;  // Exit after running the ps command
+    // }
+
     while(1) {
         print_prompt(getcwd(curr_dir, sizeof(curr_dir)), pid);
     
@@ -210,6 +255,9 @@ int shell(int argc, char *argv[]) {
                 exit(1); 
             }
         }
+
+        
+
         if (strstr(written_in_terminal, "#")) {
         size_t num = atoi(written_in_terminal + 1);
         if (num >= 0 && num < vector_size(vect)) {
@@ -224,6 +272,10 @@ int shell(int argc, char *argv[]) {
         char *newline = strchr(written_in_terminal, '\n');
         if (newline) {
             *newline = '\0';
+        }
+        if (strcmp(written_in_terminal, "ps") == 0) {
+            execute_ps();
+            return 0;  // Exit after running the ps command
         }
         if (strcmp(written_in_terminal, "!history") != 0) {
             vector_push_back(vect, written_in_terminal);
@@ -270,6 +322,7 @@ int shell(int argc, char *argv[]) {
         
         
     }
+    
     vector_destroy(vect);
     return 0;
 }
