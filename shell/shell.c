@@ -5,6 +5,7 @@
 
 // I used Chat GPT for initial design and debugging code - it worked well.
 
+
 #include "format.h"
 #include "shell.h"
 #include <stdio.h>
@@ -17,6 +18,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <dirent.h>
+#include <fcntl.h>
 
 #define MAX_INPUT_SIZE 1024
 static pid_t foreground_pid = 0;
@@ -60,6 +62,39 @@ int change_directory(const char* path) {
     return 0;
 }
 
+// int execute_command(char* command) {
+//     if (strcmp(command, "") == 0) {
+//         return 0;  // Empty command
+//     } else if (strncmp(command, "cd ", 3) == 0) {
+//         return change_directory(command + 3); // +3 to skip "cd "
+//     }
+
+//     int status;
+//     pid_t new_pid = fork();
+
+//     if (new_pid == 0) {
+//         char* token = strtok(command, " ");
+//         char* args[100];
+//         int i = 0;
+//         while (token != NULL) {
+//             args[i++] = token;
+//             token = strtok(NULL, " ");
+//         }
+//         args[i] = NULL;
+//         execvp(args[0], args);
+//         // perror("execvp failed");
+//         exit(0);
+//     } else if (new_pid > 0) {
+//         waitpid(new_pid, &status, 0);
+//         return WEXITSTATUS(status);
+//     } else {
+//         print_fork_failed();
+//         return -1;
+//     }
+//     return 0;
+// }
+
+
 int execute_command(char* command) {
     if (strcmp(command, "") == 0) {
         return 0;  // Empty command
@@ -71,6 +106,57 @@ int execute_command(char* command) {
     pid_t new_pid = fork();
 
     if (new_pid == 0) {
+        // Redirection variables
+        char* output_file = NULL;
+        char* input_file = NULL;
+
+        // Check for output redirection '>'
+        if (strstr(command, " > ")) {
+            char* output_redirect = strstr(command, ">");
+            if (output_redirect) {
+                *output_redirect = '\0'; // Split the command
+                output_file = strtok(output_redirect + 1, " "); // Get the filename
+                int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+           
+         } 
+         //else if (strstr(command, " >> ")) {
+        //     // Check for append output redirection '>>'
+        //     char* append_redirect = strstr(command, ">>");
+        //     if (append_redirect) {
+        //         *append_redirect = '\0'; // Split the command
+        //         output_file = strtok(append_redirect + 2, " "); // Get the filename
+        //         int fd = open(output_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        //         dup2(fd, STDOUT_FILENO);
+        //         close(fd);
+        //     }
+            
+        //} 
+        else if (strstr(command, " >> ")) {
+    // Check for append output redirection '>>'
+            char* append_redirect = strstr(command, " >> ");
+            if (append_redirect) {
+                *append_redirect = '\0'; // Split the command
+                output_file = strtok(append_redirect + 3, " "); // Get the filename
+                int fd = open(output_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+        }
+        else if (strstr(command, " < ")) {
+            char* input_redirect = strstr(command, "<");
+            if (input_redirect) {
+                *input_redirect = '\0'; // Split the command
+                input_file = strtok(input_redirect + 1, " "); // Get the filename
+                int fd = open(input_file, O_RDONLY);
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            
+        }
+
         char* token = strtok(command, " ");
         char* args[100];
         int i = 0;
@@ -92,15 +178,9 @@ int execute_command(char* command) {
     return 0;
 }
 
-
-void execute_ps() {
+void execute_ps(char written_in_terminal[]) {
     print_process_info_header();
 
-    // Iterate through processes and print their information
-    // You can use your own logic to gather process information and populate process_info structs
-    // For example, you can use the /proc filesystem as demonstrated in the previous response.
-
-    // Example usage of process_info:
     process_info pinfo;
     pinfo.pid = getpid();
     pinfo.nthreads = 1;
@@ -108,8 +188,8 @@ void execute_ps() {
     pinfo.state = 'R';
     pinfo.start_str = "14:03";
     pinfo.time_str = "0:08";
-    pinfo.command = "dd if=/dev/zero bs=1M count=123456 of=/dev/null &";
-
+    pinfo.command = written_in_terminal;
+    printf("%s", written_in_terminal);
     print_process_info(&pinfo);
 
     // Repeat the above process_info printing for other processes
@@ -274,9 +354,20 @@ int shell(int argc, char *argv[]) {
             *newline = '\0';
         }
         if (strcmp(written_in_terminal, "ps") == 0) {
-            execute_ps();
+            execute_ps(written_in_terminal);
             return 0;  // Exit after running the ps command
         }
+        
+        if(strstr(written_in_terminal, ">") || strstr(written_in_terminal, ">>") || strstr(written_in_terminal, "<")) {
+            int redirect_status = execute_command(written_in_terminal);
+            if (redirect_status != 0) {
+                perror("error");
+                exit(1);
+            }
+        }
+            
+
+
         if (strcmp(written_in_terminal, "!history") != 0) {
             vector_push_back(vect, written_in_terminal);
         }
