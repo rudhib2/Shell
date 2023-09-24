@@ -5,7 +5,6 @@
 
 // I used Chat GPT for initial design and debugging code - it worked well.
 
-
 #include "format.h"
 #include "shell.h"
 #include <stdio.h>
@@ -28,6 +27,21 @@ typedef struct process {
     pid_t pid;
 } process;
 
+int is_background_process(char* command) {
+    // Check if the command ends with '&'
+    int len = strlen(command);
+    if (len > 0 && command[len - 1] == '&') {
+        // printf("before removal %s\n", command);
+        command[len - 1] = '\0'; // Remove the '&'
+        command[len - 2] = '\0';
+        // printf("after removal %s\n", command);
+        return 1; // It's a background process
+    }
+    return 0; // It's not a background process
+}
+
+
+
 void sigint_handler(int signo) {
     if (foreground_pid > 0) {
         kill(-foreground_pid, SIGINT);
@@ -40,12 +54,12 @@ int change_directory(const char* path) {
         } else {
             perror("cd");
         }
-        // return -1;
     }
     return 0;
 }
 
 int execute_command(char* command) {
+    int background = is_background_process(command);
     if (strcmp(command, "") == 0) {
         return 0;  // Empty command
     } else if (strncmp(command, "cd ", 3) == 0) {
@@ -56,6 +70,10 @@ int execute_command(char* command) {
 
     if (new_pid == 0) {
         // Redirection variables
+        print_command_executed(getpid());
+        if (background) {
+            setsid(); // Create a new session for the background process.
+        }
         char* output_file = NULL;
         char* input_file = NULL;
         
@@ -99,8 +117,18 @@ int execute_command(char* command) {
         // perror("execvp failed");
         exit(0);
     } else if (new_pid > 0) {
-        waitpid(new_pid, &status, 0);
-        return WEXITSTATUS(status);
+        if (!background) {
+            // This is a foreground process
+            waitpid(new_pid, &status, 0);
+            foreground_pid = new_pid;
+        } 
+        // else {
+        //     // This is a background process
+        //     // Do not wait, continue accepting commands
+        //     waitpid(new_pid, &status, 0);
+        // }
+        // return WEXITSTATUS(status);
+        return 0;
     } else {
         print_fork_failed();
         return -1;
@@ -118,7 +146,7 @@ void execute_ps(char written_in_terminal[]) {
     pinfo.start_str = "14:03";
     pinfo.time_str = "0:08";
     pinfo.command = written_in_terminal;
-    printf("%s", written_in_terminal);
+    // printf("%s", written_in_terminal);
     print_process_info(&pinfo);
 }
 
@@ -176,6 +204,7 @@ void execute_script(const char* filename) {
         if (new_pid > 0) {
             waitpid(new_pid, &status, 0);
         } else if (new_pid == 0) {
+            print_command_executed(getpid());
             if (strcmp(line, "") != 0) {
                 char* token = strtok(line, " ");
                 char* args[100];
@@ -207,9 +236,10 @@ void handle_kill_command(char *command) {
         } else {
             print_no_process_found(pid);
         }
-    } else {
-        printf("kill was ran without a pid\n");
-    }
+    } 
+    // else {
+    //     printf("kill was ran without a pid\n");
+    // }
 }
 
 void handle_stop_command(char *command) {
@@ -221,9 +251,11 @@ void handle_stop_command(char *command) {
         } else {
             print_no_process_found(pid);
         }
-    } else {
-        printf("stop was ran without a pid\n");
-    }
+    } 
+    // else {
+    //     // printf("stop was ran without a pid\n");
+
+    // }
 }
 
 void handle_cont_command(char *command) {
@@ -235,9 +267,11 @@ void handle_cont_command(char *command) {
         } else if (result == -1) {
             print_no_process_found(pid);
         }
-    } else {
-        printf("cont was ran without a pid\n");
-    }
+    } 
+    // else {
+    //     // printf("cont was ran without a pid\n");
+    //     continue;
+    // }
 }
 
 int shell(int argc, char *argv[]) {
@@ -252,14 +286,12 @@ int shell(int argc, char *argv[]) {
         history_flag = 1;
         history_filename = argv[2];
     }
-
     int script_flag = 0;
     char* script_filename = NULL;
     if (argc == 3 && strcmp(argv[1], "-f") == 0) {
         script_flag = 1;
         script_filename = argv[2];
     }
-
     FILE *history_file = NULL;
     if (history_flag) {
         history_file = fopen(history_filename, "a");
@@ -269,12 +301,10 @@ int shell(int argc, char *argv[]) {
             exit(0);
         }
     }
-
     if (script_flag) {
         execute_script(script_filename);
         exit(0); // Exit after running the script
     }
-
     while(1) {
         print_prompt(getcwd(curr_dir, sizeof(curr_dir)), pid);
     
@@ -295,6 +325,8 @@ int shell(int argc, char *argv[]) {
         //     print_invalid_command(written_in_terminal);
         // }
 
+        int background = is_background_process(written_in_terminal);
+
         if (strstr(written_in_terminal, "kill ")) {
             handle_kill_command(written_in_terminal);
             continue; // Continue to the next iteration
@@ -304,17 +336,30 @@ int shell(int argc, char *argv[]) {
         } else if (strstr(written_in_terminal, "cont ")) {
             handle_cont_command(written_in_terminal);
             continue; // Continue to the next iteration
+        } else if (strstr(written_in_terminal, " & ")){
+            int status;
+            if (background) {
+                // Background process, don't wait, continue accepting commands
+                execute_command(written_in_terminal);
+            } else {
+                // Foreground process, wait for it to finish
+                status = execute_command(written_in_terminal);
+                if (status != 0) {
+                    perror("error");
+                    exit(1);
+                }
+            }
         }
 
         if (strstr(written_in_terminal, "#")) {
         size_t num = atoi(written_in_terminal + 1);
-        if (num >= 0 && num < vector_size(vect)) {
-            char * command = (char*) vector_get(vect, num);
-            strcpy(written_in_terminal, command);
-            print_command(command);
-
+            if (num >= 0 && num < vector_size(vect)) {
+                char * command = (char*) vector_get(vect, num);
+                strcpy(written_in_terminal, command);
+                print_command(command);
             } else {
                 print_invalid_index();
+                continue;
             }
         }
         char *newline = strchr(written_in_terminal, '\n');
@@ -347,7 +392,7 @@ int shell(int argc, char *argv[]) {
         int status;
         if (history_flag) {
             if (strcmp(written_in_terminal, "!history") != 0) {
-                fprintf(history_file, "\n%s", written_in_terminal);
+                fprintf(history_file, "%s\n", written_in_terminal);
                 fflush(history_file);
             }
         }
