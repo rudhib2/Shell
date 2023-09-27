@@ -6,6 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
+
+
+typedef struct _metadata_entry_t {
+    void *ptr;
+    int size;
+    int free;
+    struct _metadata_entry_t *next;
+} metadata_entry_t;
+
+static metadata_entry_t* head = NULL;
 
 /**
  * Allocate space for array in memory
@@ -58,7 +69,34 @@ void *calloc(size_t num, size_t size) {
  */
 void *malloc(size_t size) {
     // implement malloc!
-    return NULL;
+    metadata_entry_t *p = head;
+    metadata_entry_t *chosen = NULL;
+
+    while(p != NULL) {
+        if (p->free && p->size >= (int)size) {
+            if (chosen == NULL || (p->size < chosen->size)) {
+                chosen = p;
+            }
+        }
+        p = p->next;
+    }
+
+    if(chosen) {
+        chosen->free = 0;
+        return chosen->ptr;
+    }
+
+    chosen = sbrk(sizeof(metadata_entry_t));
+    chosen->ptr = sbrk(0);
+    if(sbrk(size) == (void*)-1) {
+        return NULL;
+    } 
+    chosen->size = size;
+    chosen->free = 0; 
+
+    chosen->next = head;
+    head = chosen;
+    return chosen->ptr;
 }
 
 /**
@@ -78,7 +116,16 @@ void *malloc(size_t size) {
  *    passed as argument, no action occurs.
  */
 void free(void *ptr) {
-    // implement free!
+    if(!ptr) return;
+    metadata_entry_t *p = head;
+    while (p) {
+        if(p->ptr == ptr) {
+            p->free = 1;
+            break;
+        }
+        p = p->next;
+    }
+    return;
 }
 
 /**
@@ -127,6 +174,25 @@ void free(void *ptr) {
  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/realloc/
  */
 void *realloc(void *ptr, size_t size) {
-    // implement realloc!
-    return NULL;
+    if (ptr == NULL) { return malloc(size);}
+    metadata_entry_t* entry = ((metadata_entry_t*)ptr) - 1;
+    assert (entry->ptr == ptr);
+    assert (entry->free == 0);
+    ssize_t oldsize = entry->size;
+    if ( (unsigned long)oldsize > (unsigned long)2*size && (oldsize - size)> 1024/*THRESHOLD*/) {
+        metadata_entry_t* newentry = entry + size;
+        newentry->ptr = newentry + 1;
+        newentry->free = 1;
+        newentry->size = size - oldsize - sizeof(entry);
+        newentry->next = entry->next;
+        entry->next = newentry;
+    }
+    if ((unsigned long)oldsize > size) {
+        return ptr;
+    }
+    void* result = malloc(size);
+    ssize_t minsize = (ssize_t)size < oldsize ? (ssize_t)size : oldsize;
+    memcpy(result, ptr, minsize);
+    free(ptr);
+    return result;
 }
