@@ -1,3 +1,4 @@
+//used ChatGPT for initial design and debugging - it works well
 /**
  * malloc
  * CS 341 - Fall 2023
@@ -11,7 +12,7 @@
 
 typedef struct _metadata_entry_t {
     void *ptr;
-    int size;
+    size_t size;
     int free;
     struct _metadata_entry_t *next;
 } metadata_entry_t;
@@ -42,8 +43,12 @@ static metadata_entry_t* head = NULL;
  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/calloc/
  */
 void *calloc(size_t num, size_t size) {
-    // implement calloc!
-    return NULL;
+    size_t total_size = num * size;
+    void *ptr = malloc(total_size);
+    if (ptr != NULL) {
+        memset(ptr, 0, total_size);
+    }
+    return ptr;
 }
 
 /**
@@ -73,27 +78,24 @@ void *malloc(size_t size) {
     metadata_entry_t *chosen = NULL;
 
     while(p != NULL) {
-        if (p->free && p->size >= (int)size) {
-            if (chosen == NULL || (p->size < chosen->size)) {
+        if (p->free && p->size >= size) {
+            if (chosen == NULL || (chosen && p->size < chosen->size)) {
                 chosen = p;
             }
         }
         p = p->next;
     }
-
     if(chosen) {
         chosen->free = 0;
         return chosen->ptr;
     }
-
     chosen = sbrk(sizeof(metadata_entry_t));
-    chosen->ptr = sbrk(0);
-    if(sbrk(size) == (void*)-1) {
+    chosen->ptr = sbrk(size);
+    if(chosen->ptr == (void*)-1) {
         return NULL;
     } 
     chosen->size = size;
     chosen->free = 0; 
-
     chosen->next = head;
     head = chosen;
     return chosen->ptr;
@@ -174,24 +176,26 @@ void free(void *ptr) {
  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/realloc/
  */
 void *realloc(void *ptr, size_t size) {
-    if (ptr == NULL) { return malloc(size);}
+    if (ptr == NULL) { 
+        return malloc(size);
+        }
     metadata_entry_t* entry = ((metadata_entry_t*)ptr) - 1;
     assert (entry->ptr == ptr);
     assert (entry->free == 0);
-    ssize_t oldsize = entry->size;
-    if ( (unsigned long)oldsize > (unsigned long)2*size && (oldsize - size)> 1024/*THRESHOLD*/) {
-        metadata_entry_t* newentry = entry + size;
-        newentry->ptr = newentry + 1;
-        newentry->free = 1;
-        newentry->size = size - oldsize - sizeof(entry);
-        newentry->next = entry->next;
-        entry->next = newentry;
-    }
-    if ((unsigned long)oldsize > size) {
+    size_t oldsize = entry->size;
+    // if ( (unsigned long)oldsize > (unsigned long)2*size && (oldsize - size)> 1024/*THRESHOLD*/) {
+    //     metadata_entry_t* newentry = entry + size;
+    //     newentry->ptr = newentry + 1;
+    //     newentry->free = 1;
+    //     newentry->size = size - oldsize - sizeof(entry);
+    //     newentry->next = entry->next;
+    //     entry->next = newentry;
+    // }
+    if (oldsize >= size) {
         return ptr;
     }
     void* result = malloc(size);
-    ssize_t minsize = (ssize_t)size < oldsize ? (ssize_t)size : oldsize;
+    ssize_t minsize = size < oldsize ? (ssize_t)size : oldsize;
     memcpy(result, ptr, minsize);
     free(ptr);
     return result;
