@@ -9,14 +9,16 @@
 #include <unistd.h>
 #include <assert.h>
 
-// typedef struct _metadata_entry_t {
-//     void *ptr;
-//     size_t size;
-//     int free;
-//     struct _metadata_entry_t *next;
-// } metadata_entry_t;
+typedef struct _metadata_entry_t {
+    void *ptr;
+    size_t size;
+    int free;
+    struct _metadata_entry_t *next;
+    struct _metadata_entry_t *prev;
+} metadata_entry_t;
 
-// static metadata_entry_t* head = NULL;
+static metadata_entry_t *head = NULL;
+static size_t total, tot_sbrk= 0;
 
 // /**
 //  * Allocate space for array in memory
@@ -41,14 +43,14 @@
 //  *
 //  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/calloc/
 //  */
-// void *calloc(size_t num, size_t size) {
-//     size_t total_size = num * size;
-//     void *ptr = malloc(total_size);
-//     if (ptr != NULL) {
-//         memset(ptr, 0, total_size);
-//     }
-//     return ptr;
-// }
+void *calloc(size_t num, size_t size) {
+    // implement calloc!
+    size_t total = num * size;
+    void *result = malloc(total);
+    if (!result) return NULL;
+    memset(result, 0, total);
+    return result;
+}
 
 // /**
 //  * Allocate memory block
@@ -71,19 +73,38 @@
 //  *
 //  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/malloc/
 //  */
-// void *malloc(size_t size) {
-//     // implement malloc!
-//     metadata_entry_t *p = head;
-//     metadata_entry_t *chosen = NULL;
 
-//     while(p != NULL) {
-//         if (p->free && p->size >= size) {
-//             if (chosen == NULL || (chosen && p->size < chosen->size)) {
-//                 chosen = p;
-//             }
-//         }
-//         p = p->next;
-//     }
+void *malloc(size_t size) {
+    // implement malloc!
+
+
+    metadata_entry_t *p = head;
+    metadata_entry_t *chosen = NULL;
+
+    while (p != NULL && tot_sbrk-total >= size) {
+        if (p->free && p->size >= size) {
+            chosen = p;
+            if (chosen->size >= 2 * size && (chosen->size - size) >= 1024) {
+                metadata_entry_t *neww = chosen->ptr + size;
+                neww->ptr = (neww + 1);
+                neww->free = 1;
+                neww->size = chosen->size - size - sizeof(metadata_entry_t);
+                neww->next = chosen;
+                if (chosen->prev) {
+                    chosen->prev->next = neww;
+                } else {
+                    head = neww;
+                }
+                neww->prev = chosen->prev;
+                chosen->size = size;
+                chosen->prev = neww;
+                total += sizeof(metadata_entry_t);
+            }
+            break;
+        }
+        p = p->next;
+    }
+
 //     if(chosen) {
 //         chosen->free = 0;
 //         return chosen->ptr;
@@ -98,7 +119,40 @@
 //     chosen->next = head;
 //     head = chosen;
 //     return chosen->ptr;
-// }
+    
+    if (chosen != NULL) {
+        chosen->free = 0;
+        total += chosen->size;
+    } else {
+        if (head && head->free) {
+            if (sbrk(size - head->size) == (void *)-1)
+                return NULL;
+            tot_sbrk += size - head->size;
+            head->size = size;
+            head->free = 0;
+            chosen = head;
+            total += head->size;
+        } else {
+            chosen = sbrk(sizeof(metadata_entry_t) + size);
+            if (chosen == (void *)-1)
+                return NULL;
+            chosen->ptr = chosen + 1;
+            chosen->size = size;
+            chosen->free = 0;
+            chosen->next = head;
+            if (head) {
+                chosen->prev = head->prev;
+                head->prev = chosen;
+            } else {
+                chosen->prev = NULL;
+            }
+            head = chosen;
+            tot_sbrk += sizeof(metadata_entry_t) + size;
+            total += sizeof(metadata_entry_t) + size;
+        }
+    }
+    return chosen->ptr;
+}
 
 // /**
 //  * Deallocate space in memory
@@ -116,18 +170,41 @@
 //  *    calloc() or realloc() to be deallocated.  If a null pointer is
 //  *    passed as argument, no action occurs.
 //  */
-// void free(void *ptr) {
-//     if(!ptr) return;
-//     metadata_entry_t *p = head;
-//     while (p) {
-//         if(p->ptr == ptr) {
-//             p->free = 1;
-//             break;
-//         }
-//         p = p->next;
-//     }
-//     return;
-// }
+
+void free(void *ptr) {
+    if (!ptr) return;
+    metadata_entry_t *p = ((metadata_entry_t*)ptr) - 1;
+    while (p) {
+        if (p->ptr == ptr) {
+            p->free = 1;
+            total -= p->size;
+
+            // Coalesce previous and next blocks if they are free
+            if (p->prev && p->prev->free == 1) {
+                p->size += p->prev->size + sizeof(metadata_entry_t);
+                p->prev = p->prev->prev;
+                if (p->prev) {
+                    p->prev->next = p;
+                } else {
+                    head = p;
+                }
+                total -= sizeof(metadata_entry_t);
+            }
+            if (p->next && p->next->free == 1) {
+                p->next->size += p->size + sizeof(metadata_entry_t);
+                p->next->prev = p->prev;
+                if (p->prev) {
+                    p->prev->next = p->next;
+                } else {
+                    head = p->next;
+                }
+                total -= sizeof(metadata_entry_t);
+            }
+            return;
+        }
+        p = p->next;
+    }
+}
 
 // /**
 //  * Reallocate memory block
@@ -174,324 +251,6 @@
 //  *
 //  * @see http://www.cplusplus.com/reference/clibrary/cstdlib/realloc/
 //  */
-// void *realloc(void *ptr, size_t size) {
-//     if (ptr == NULL) { 
-//         return malloc(size);
-//         }
-//     metadata_entry_t* entry = ((metadata_entry_t*)ptr) - 1;
-//     assert (entry->ptr == ptr);
-//     assert (entry->free == 0);
-//     size_t oldsize = entry->size;
-//     // if ( (unsigned long)oldsize > (unsigned long)2*size && (oldsize - size)> 1024/*THRESHOLD*/) {
-//     //     metadata_entry_t* newentry = entry + size;
-//     //     newentry->ptr = newentry + 1;
-//     //     newentry->free = 1;
-//     //     newentry->size = size - oldsize - sizeof(entry);
-//     //     newentry->next = entry->next;
-//     //     entry->next = newentry;
-//     // }
-//     if (oldsize >= size) {
-//         return ptr;
-//     }
-//     void* result = malloc(size);
-//     ssize_t minsize = size < oldsize ? (ssize_t)size : oldsize;
-//     memcpy(result, ptr, minsize);
-//     free(ptr);
-//     return result;
-// }
-
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <string.h>
-// #include <unistd.h>
-// #include <assert.h>
-
-// typedef struct _metadata_entry_t {
-//     void *ptr;
-//     size_t size;
-//     int free;
-//     struct _metadata_entry_t *next;
-//     struct _metadata_entry_t *prev;
-// } metadata_entry_t;
-
-// static metadata_entry_t *head = NULL;
-// static size_t total_memory_requested = 0;
-// static size_t total_memory_sbrk = 0;
-
-// // Add a forward declaration for the splitBlock function
-// int splitBlock(size_t size, metadata_entry_t *entry);
-
-// void coalescePrev(metadata_entry_t *p);
-// void coalesceBlock(metadata_entry_t *p);
-
-// void *calloc(size_t num, size_t size) {
-//     // implement calloc!
-//     size_t total = num * size;
-//     void *result = malloc(total);
-//     if (!result) return NULL;
-//     memset(result, 0, total);
-//     return result;
-// }
-
-// int splitBlock(size_t size, metadata_entry_t *entry) {
-//     if (entry->size >= 2 * size && (entry->size - size) >= 1024) {
-//         metadata_entry_t *new_entry = entry->ptr + size;
-//         new_entry->ptr = (new_entry + 1);
-//         new_entry->free = 1;
-//         new_entry->size = entry->size - size - sizeof(metadata_entry_t);
-//         new_entry->next = entry;
-//         if (entry->prev) {
-//             entry->prev->next = new_entry;
-//         } else {
-//             head = new_entry;
-//         }
-//         new_entry->prev = entry->prev;
-//         entry->size = size;
-//         entry->prev = new_entry;
-//         return 1;
-//     }
-//     return 0;
-// }
-
-// void *malloc(size_t size) {
-//     // implement malloc!
-//     metadata_entry_t *p = head;
-//     metadata_entry_t *chosen = NULL;
-
-//     while (p != NULL) {
-//         if (p->free && p->size >= size) {
-//             chosen = p;
-//             if (splitBlock(size, p)) {
-//                 total_memory_requested += sizeof(metadata_entry_t);
-//             }
-//             break;
-//         }
-//         p = p->next;
-//     }
-//     if (chosen) {
-//         chosen->free = 0;
-//         total_memory_requested += chosen->size;
-//     } else {
-//         if (head && head->free) {
-//             if (sbrk(size - head->size) == (void *)-1)
-//                 return NULL;
-//             total_memory_sbrk += size - head->size;
-//             head->size = size;
-//             head->free = 0;
-//             chosen = head;
-//             total_memory_requested += head->size;
-//         } else {
-//             chosen = sbrk(sizeof(metadata_entry_t) + size);
-//             if (chosen == (void *)-1)
-//                 return NULL;
-//             chosen->ptr = chosen + 1;
-//             chosen->size = size;
-//             chosen->free = 0;
-//             chosen->next = head;
-//             if (head) {
-//                 chosen->prev = head->prev;
-//                 head->prev = chosen;
-//             } else {
-//                 chosen->prev = NULL;
-//             }
-//             head = chosen;
-//             total_memory_sbrk += sizeof(metadata_entry_t) + size;
-//             total_memory_requested += sizeof(metadata_entry_t) + size;
-//         }
-//     }
-//     return chosen->ptr;
-// }
-
-// void coalescePrev(metadata_entry_t *p) {
-//     p->size += p->prev->size + sizeof(metadata_entry_t);
-//     p->prev = p->prev->prev;
-//     if (p->prev) {
-//         p->prev->next = p;
-//     } else {
-//         head = p;
-//     }
-// }
-
-// void coalesceBlock(metadata_entry_t *p) {
-//     if (p->prev && p->prev->free == 1) {
-//         coalescePrev(p);
-//         total_memory_requested -= sizeof(metadata_entry_t);
-//     }
-//     if (p->next && p->next->free == 1) {
-//         p->next->size += p->size + sizeof(metadata_entry_t);
-//         p->next->prev = p->prev;
-//         if (p->prev) {
-//             p->prev->next = p->next;
-//         } else {
-//             head = p->next;
-//         }
-//         total_memory_requested -= sizeof(metadata_entry_t);
-//     }
-// }
-
-// void free(void *ptr) {
-//     if (!ptr) return;
-//     metadata_entry_t *p = head;
-//     while (p) {
-//         if (p->ptr == ptr) {
-//             p->free = 1;
-//             total_memory_requested -= p->size;
-//             coalesceBlock(p);
-//             return;
-//         }
-//         p = p->next;
-//     }
-// }
-
-// void *realloc(void *ptr, size_t size) {
-//     // implement realloc!
-//     if (!ptr) return malloc(size);
-//     metadata_entry_t *entry = ((metadata_entry_t *)ptr) - 1;
-//     assert(entry->ptr == ptr);
-//     assert(entry->free == 0);
-//     if (!size) {
-//         free(ptr);
-//         return NULL;
-//     }
-//     if (splitBlock(size, entry)) {
-//         total_memory_requested -= entry->prev->size;
-//     }
-//     if (entry->size >= size) {
-//         return ptr;
-//     } else if (entry->prev && entry->prev->free && entry->size + entry->prev->size + sizeof(metadata_entry_t) >= size) {
-//         total_memory_requested += entry->prev->size;
-//         coalescePrev(entry);
-//         return entry->ptr;
-//     }
-//     void *new_ptr = malloc(size);
-//     memcpy(new_ptr, ptr, entry->size);
-//     free(ptr);
-//     return new_ptr;
-// }
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <assert.h>
-
-typedef struct _metadata_entry_t {
-    void *ptr;
-    size_t size;
-    int free;
-    struct _metadata_entry_t *next;
-    struct _metadata_entry_t *prev;
-} metadata_entry_t;
-
-static metadata_entry_t *head = NULL;
-static size_t total_memory_requested = 0;
-static size_t total_memory_sbrk = 0;
-
-void *calloc(size_t num, size_t size) {
-    // implement calloc!
-    size_t total = num * size;
-    void *result = malloc(total);
-    if (!result) return NULL;
-    memset(result, 0, total);
-    return result;
-}
-
-void *malloc(size_t size) {
-    // implement malloc!
-    metadata_entry_t *p = head;
-    metadata_entry_t *chosen = NULL;
-
-    while (p != NULL) {
-        if (p->free && p->size >= size) {
-            chosen = p;
-            if (chosen->size >= 2 * size && (chosen->size - size) >= 1024) {
-                metadata_entry_t *new_entry = chosen->ptr + size;
-                new_entry->ptr = (new_entry + 1);
-                new_entry->free = 1;
-                new_entry->size = chosen->size - size - sizeof(metadata_entry_t);
-                new_entry->next = chosen;
-                if (chosen->prev) {
-                    chosen->prev->next = new_entry;
-                } else {
-                    head = new_entry;
-                }
-                new_entry->prev = chosen->prev;
-                chosen->size = size;
-                chosen->prev = new_entry;
-                total_memory_requested += sizeof(metadata_entry_t);
-            }
-            break;
-        }
-        p = p->next;
-    }
-    if (chosen) {
-        chosen->free = 0;
-        total_memory_requested += chosen->size;
-    } else {
-        if (head && head->free) {
-            if (sbrk(size - head->size) == (void *)-1)
-                return NULL;
-            total_memory_sbrk += size - head->size;
-            head->size = size;
-            head->free = 0;
-            chosen = head;
-            total_memory_requested += head->size;
-        } else {
-            chosen = sbrk(sizeof(metadata_entry_t) + size);
-            if (chosen == (void *)-1)
-                return NULL;
-            chosen->ptr = chosen + 1;
-            chosen->size = size;
-            chosen->free = 0;
-            chosen->next = head;
-            if (head) {
-                chosen->prev = head->prev;
-                head->prev = chosen;
-            } else {
-                chosen->prev = NULL;
-            }
-            head = chosen;
-            total_memory_sbrk += sizeof(metadata_entry_t) + size;
-            total_memory_requested += sizeof(metadata_entry_t) + size;
-        }
-    }
-    return chosen->ptr;
-}
-
-void free(void *ptr) {
-    if (!ptr) return;
-    metadata_entry_t *p = head;
-    while (p) {
-        if (p->ptr == ptr) {
-            p->free = 1;
-            total_memory_requested -= p->size;
-
-            // Coalesce previous and next blocks if they are free
-            if (p->prev && p->prev->free == 1) {
-                p->size += p->prev->size + sizeof(metadata_entry_t);
-                p->prev = p->prev->prev;
-                if (p->prev) {
-                    p->prev->next = p;
-                } else {
-                    head = p;
-                }
-                total_memory_requested -= sizeof(metadata_entry_t);
-            }
-            if (p->next && p->next->free == 1) {
-                p->next->size += p->size + sizeof(metadata_entry_t);
-                p->next->prev = p->prev;
-                if (p->prev) {
-                    p->prev->next = p->next;
-                } else {
-                    head = p->next;
-                }
-                total_memory_requested -= sizeof(metadata_entry_t);
-            }
-            return;
-        }
-        p = p->next;
-    }
-}
 
 void *realloc(void *ptr, size_t size) {
     // implement realloc!
@@ -508,7 +267,7 @@ void *realloc(void *ptr, size_t size) {
     if (entry->size >= size) {
         return ptr;
     } else if (entry->prev && entry->prev->free && entry->size + entry->prev->size + sizeof(metadata_entry_t) >= size) {
-        total_memory_requested += entry->prev->size;
+        total += entry->prev->size;
         entry->size += entry->prev->size + sizeof(metadata_entry_t);
         entry->prev = entry->prev->prev;
         if (entry->prev) {
