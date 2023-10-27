@@ -27,7 +27,7 @@ pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 queue *q;
 int failed = 0;
-
+int active_threads = 0;
 
 bool cycle(dictionary *history, void *target) {
     int *var = dictionary_get(history, target);
@@ -118,7 +118,6 @@ int runningCommands(char* vtx) {
         queue_push(q, rule);
     } else {
         rule->state = 1;
-        pthread_cond_signal(&cv);
     }
     return 0;
 }
@@ -144,7 +143,6 @@ void *myfunc() {
 }
 
 
-
 int parmake(char *makefile, size_t num_threads, char **targets) {
     q = queue_create(-1);
     pthread_t tid[num_threads];
@@ -165,7 +163,11 @@ int parmake(char *makefile, size_t num_threads, char **targets) {
             print_cycle_failure(goal);
         }
     }
-    queue_push(q, NULL);
+    for (size_t j = 0; j < num_threads; j++) {
+        pthread_mutex_lock(&m);
+        queue_push(q, NULL);  
+        pthread_mutex_unlock(&m);
+    }
     for (size_t j = 0; j < num_threads; j++) {
         pthread_join(tid[j], NULL);
     }
@@ -176,6 +178,8 @@ int parmake(char *makefile, size_t num_threads, char **targets) {
     pthread_cond_destroy(&cv);
     return 0;
 }
+
+
 
 
 // vector *parentOfCyclic(char *vertex) {
@@ -196,6 +200,7 @@ int parmake(char *makefile, size_t num_threads, char **targets) {
 //     }
 //     return false;
 // }
+
 
 // int parmake(char *makefile, size_t num_threads, char **targets) {
 //     // good luck!
