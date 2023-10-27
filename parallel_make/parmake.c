@@ -103,9 +103,11 @@ int runningCommands(char* vtx) {
         }
     }
     if (vector_size(neighbors) > 0) {
+        pthread_mutex_lock(&m);
         while (!all_satisfied(neighbors)) {
             pthread_cond_wait(&cv, &m);
         }
+        pthread_mutex_unlock(&m);
     }
     vector_destroy(neighbors);
     if (failed) {
@@ -116,6 +118,7 @@ int runningCommands(char* vtx) {
         queue_push(q, rule);
     } else {
         rule->state = 1;
+        pthread_cond_signal(&cv);
     }
     return 0;
 }
@@ -148,6 +151,8 @@ int parmake(char *makefile, size_t num_threads, char **targets) {
     for (size_t i = 0; i < num_threads; i++) {
         pthread_create(&tid[i], NULL, myfunc, NULL);
     }
+    pthread_cond_init(&cv, NULL);
+    pthread_mutex_init(&m, NULL);
     full_graph = parser_parse_makefile(makefile, targets);
     vector *goals = graph_neighbors(full_graph, "");
     for (size_t i = 0; i < vector_size(goals); i++) {
@@ -167,6 +172,8 @@ int parmake(char *makefile, size_t num_threads, char **targets) {
     vector_destroy(goals);
     graph_destroy(full_graph);
     queue_destroy(q);
+    pthread_mutex_destroy(&m);
+    pthread_cond_destroy(&cv);
     return 0;
 }
 
