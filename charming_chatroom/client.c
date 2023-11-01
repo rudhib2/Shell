@@ -29,7 +29,9 @@ void close_program(int signal);
  * Called by close_program upon SIGINT.
  */
 void close_server_connection() {
-    // Your code here
+    // Your code 
+    shutdown(serverSocket, SHUT_RDWR);
+    close(serverSocket);
 }
 
 /**
@@ -45,14 +47,36 @@ int connect_to_server(const char *host, const char *port) {
     /*QUESTION 1*/
     /*QUESTION 2*/
     /*QUESTION 3*/
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
 
     /*QUESTION 4*/
     /*QUESTION 5*/
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
 
     /*QUESTION 6*/
+    int s = getaddrinfo(host, port, &hints, &result);
+    if (s != 0) {
+      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+      exit(1);
+    }
 
     /*QUESTION 7*/
-    return -1;
+    int sock_fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (sock_fd == -1) {
+      perror(NULL);
+      exit(1);
+    }
+    int ok = connect(sock_fd, result->ai_addr, result->ai_addrlen);
+    if (ok == -1) {
+      perror(NULL);
+      exit(1);
+    }
+
+    freeaddrinfo(result);
+
+    return sock_fd;
 }
 
 typedef struct _thread_cancel_args {
