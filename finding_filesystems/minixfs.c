@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 /**
  * Virtual paths:
@@ -38,7 +39,24 @@ int minixfs_virtual_path_count =
 
 int minixfs_chmod(file_system *fs, char *path, int new_permissions) {
     // Thar she blows!
-    return 0;
+    // return 0;
+
+    inode* target_inode = get_inode(fs, path);
+
+    // If the file does not exist, return ENOENT.
+    if (target_inode == NULL) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    uint16_t type = target_inode->mode >> RWX_BITS_NUMBER;
+    target_inode->mode = (new_permissions & 0777) | (type << RWX_BITS_NUMBER);
+
+    struct timespec current_time;
+    clock_gettime(CLOCK_REALTIME, &current_time);
+    target_inode->ctim = current_time;
+
+    return 0; 
 }
 
 int minixfs_chown(file_system *fs, char *path, uid_t owner, gid_t group) {
