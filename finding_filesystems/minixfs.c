@@ -77,34 +77,7 @@ int minixfs_chown(file_system *fs, char *path, uid_t owner, gid_t group) {
 
 inode *minixfs_create_inode_for_path(file_system *fs, const char *path) {
     // Land ahoy!
-    // return NULL;
-    // Check if the specified file or directory already exists or if the filename is invalid
-    inode *existing_node = get_inode(fs, path);
-
-    if (existing_node || !valid_filename(path)) {
-        return NULL;
-    }
-    const char *new_name;
-    inode *parent_inode = parent_directory(fs, path, &new_name);
-    inode_number new_inode_number = first_unused_inode(fs);
-    init_inode(parent_inode, &(fs->inode_root[new_inode_number]));
-    minixfs_dirent new_entry;
-    new_entry.name = strdup(new_name);
-    new_entry.inode_num = new_inode_number;
-    int data_block_index = parent_inode->size / sizeof(data_block);
-    size_t remaining_space = parent_inode->size % sizeof(data_block);
-    data_block_number block_number;
-    if (data_block_index < NUM_DIRECT_BLOCKS) {
-        block_number = parent_inode->direct[data_block_index];
-        make_string_from_dirent(fs->data_root[block_number].data + remaining_space, new_entry);
-    } else {
-        block_number = parent_inode->indirect;
-        data_block_number* indirect_blocks = (data_block_number*)fs->data_root[block_number].data;
-        data_block_number indirect_block_number = indirect_blocks[data_block_index - NUM_DIRECT_BLOCKS];
-        make_string_from_dirent(fs->data_root[indirect_block_number].data + remaining_space, new_entry);
-    }
-    free(new_entry.name);
-    return fs->inode_root + new_inode_number;
+    return NULL;
 }
 
 ssize_t minixfs_virtual_read(file_system *fs, const char *path, void *buf,
