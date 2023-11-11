@@ -1,22 +1,287 @@
+//used chatGPT for debugging and initial structure
+
 /**
  * nonstop_networking
  * CS 341 - Fall 2023
  */
 #include "format.h"
+#include <stdbool.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
+#include <netdb.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "common.h"
 
 char **parse_args(int argc, char **argv);
 verb check_args(char **args);
+int connect_to_server(char **args);
+void write_cmd(char **args, int socket, verb method);
+void read_response(char **args, int socket, verb method);
+
+
 int main(int argc, char **argv) {
     // Good luck!
+    char **args = parse_args(argc, argv);
+    if (args == NULL) {
+        return 1;
+    }
+    verb method = check_args(args);
+    int serverSocket = connect_to_server(args);
+    if (serverSocket < 0) {
+        free(args);
+        return 1;
+    }
+    write_cmd(args, serverSocket, method);
+    if (shutdown(serverSocket, SHUT_WR) != 0) {
+        perror("shutdown()");
+    }
+    read_response(args, serverSocket, method);
+    if (shutdown(serverSocket, SHUT_RD) != 0) {
+        perror("shutdown()");
+    }
+    if (close(serverSocket) != 0) {
+        perror("close()");
+    }
+    free(args);
 }
+
+void read_response(char **args, int socket, verb method) {
+  char *buffer = calloc(1,strlen("OK\n")+1);
+  size_t bytes_rd = read_from_socket(socket, buffer, strlen("OK\n"));
+  if (strcmp(buffer, "OK\n") == 0) {
+    fprintf(stdout, "%s", buffer);
+    if (method == DELETE || method == PUT) {
+      print_success();
+    } else if (method == GET) {
+      FILE *local = fopen(args[4], "a+");
+      if (!local) {
+        perror(NULL);
+        exit(1);
+      }
+      size_t size;
+      read_from_socket(socket, (char *)&size, sizeof(size_t));
+      // fprintf(stdout, "%zu", size);
+      size_t bytes_read = 0;
+      while (bytes_read < size+5) {
+        size_t size_hd = (size+5-bytes_read) > 1024 ? 1024 : (size+5-bytes_read);
+        char buffer_f[1024+1] = {0};
+        size_t rc = read_from_socket(socket, buffer_f, size_hd);
+        fwrite(buffer_f, 1, rc, local);
+        // fprintf(stdout, "%s", buffer_f);
+        bytes_read += rc;
+        if (rc == 0)
+          break;
+      }
+      if (print_any_err(bytes_read, size)) exit(1);
+      fclose(local);
+    } else if (method == LIST) {
+      size_t size;
+      read_from_socket(socket, (char *)&size, sizeof(size_t));
+      char buffer_f[size+5+1];
+      memset(buffer_f, 0, size+5+1);
+      bytes_rd = read_from_socket(socket, buffer_f, size+5);
+      if (print_any_err(bytes_rd, size)) exit(1);
+      fprintf(stdout, "%zu%s", size, buffer_f);
+    }
+  } else {
+    buffer = realloc(buffer, strlen("ERROR\n")+1);
+    read_from_socket(socket, buffer+bytes_rd, strlen("ERROR\n")-bytes_rd);
+    if (strcmp(buffer, "ERROR\n") == 0) {
+      fprintf(stdout, "%s", buffer);
+      char err[20] = {0};
+      if (!read_from_socket(socket, err, 20))
+        print_connection_closed();
+      print_error_message(err);
+    } else {
+      print_invalid_response();
+    }
+  }
+  free(buffer);
+}
+
+void write_cmd(char **args, int socket, verb method) {
+  char *msg;
+  if (method == LIST) {
+    msg = calloc(1, strlen(args[2])+2);
+    sprintf(msg, "%s\n", args[2]);
+  } else {
+    msg = calloc(1, strlen(args[2])+strlen(args[3])+3);
+    sprintf(msg, "%s %s\n", args[2], args[3]);
+  }
+  ssize_t len = strlen(msg);
+  if (write_to_socket(socket, msg, len) < len) {
+    print_connection_closed();
+    exit(1);
+  }
+  free(msg);
+
+  if (method == PUT) {
+    struct stat buf;
+    if(stat(args[4], &buf) == -1)
+      exit(1);
+    size_t size = buf.st_size;
+    write_to_socket(socket, (char*)&size, sizeof(size_t));
+    // LOG("client write_cmd size:%zu", size);
+    FILE *local = fopen(args[4], "r");
+    if (!local) {
+      fprintf(stdout, "local file open fail\n");
+      exit(1);
+    }
+    size_t bytes_write = 0;
+    while (bytes_write < size) {
+      ssize_t size_hd = (size-bytes_write) > 1024 ? 1024 : (size-bytes_write);
+      char buffer[size_hd+1];
+      fread(buffer, 1, size_hd, local);
+      if (write_to_socket(socket, buffer, size_hd) < size_hd) {
+        print_connection_closed();
+        exit(1);
+        }
+      bytes_write += size_hd;
+    }
+    fclose(local);
+  }
+}
+
+int connect_to_server(char **args) {
+  struct addrinfo hints, *result;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  int s = getaddrinfo(args[0], args[1], &hints, &result);
+  if (s != 0) {
+    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+    exit(1);
+  }
+  int sock_fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+  if (sock_fd == -1) {
+    perror(NULL);
+    exit(1);
+  }
+  int ok = connect(sock_fd, result->ai_addr, result->ai_addrlen);
+  if (ok == -1) {
+    perror(NULL);
+    exit(1);
+  }
+  freeaddrinfo(result);
+  return sock_fd;
+}
+
+// int connect_to_server(char **args, int* error_code) {
+//     struct addrinfo hints, *result;
+//     memset(&hints, 0, sizeof(hints));
+//     hints.ai_family = AF_INET;
+//     hints.ai_socktype = SOCK_STREAM;
+
+//     int s = getaddrinfo(args[0], args[1], &hints, &result);
+//     if (s != 0) {
+//         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+//         *error_code = 1; // Set error code
+//         return -1; // Return an error indicator
+//     }
+
+//     int sock_fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+//     if (sock_fd == -1) {
+//         perror(NULL);
+//         freeaddrinfo(result);
+//         *error_code = 2; // Set error code
+//         return -1; // Return an error indicator
+//     }
+
+//     int ok = connect(sock_fd, result->ai_addr, result->ai_addrlen);
+//     if (ok == -1) {
+//         perror(NULL);
+//         close(sock_fd);
+//         freeaddrinfo(result);
+//         *error_code = 3; // Set error code
+//         return -1; // Return an error indicator
+//     }
+
+//     freeaddrinfo(result);
+//     *error_code = 0; // Set success code
+//     return sock_fd;
+// }
+
+// typedef enum {
+//     NO_ERROR,
+//     ADDR_INFO_ERROR,
+//     SOCKET_ERROR,
+//     CONNECT_ERROR
+// } ErrorCode;
+
+// typedef struct {
+//     int socket_fd;
+//     ErrorCode error_code;
+//     bool connection_successful;
+// } ConnectionInfo;
+
+// void handle_error(ErrorCode error_code) {
+//     switch (error_code) {
+//         case ADDR_INFO_ERROR:
+//             fprintf(stderr, "getaddrinfo error\n");
+//             break;
+//         case SOCKET_ERROR:
+//             perror("socket creation error");
+//             break;
+//         case CONNECT_ERROR:
+//             perror("connection error");
+//             break;
+//         default:
+//             break;
+//     }
+// }
+
+// ConnectionInfo connect_to_server(char **args) {
+//     ConnectionInfo connection;
+//     struct addrinfo hints, *result;
+//     memset(&hints, 0, sizeof(hints));
+//     hints.ai_family = AF_INET;
+//     hints.ai_socktype = SOCK_STREAM;
+
+//     int s = getaddrinfo(args[0], args[1], &hints, &result);
+//     if (s != 0) {
+//         connection.error_code = ADDR_INFO_ERROR;
+//         connection.connection_successful = false;
+//         handle_error(connection.error_code);
+//         return connection;
+//     }
+
+//     int sock_fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+//     if (sock_fd == -1) {
+//         freeaddrinfo(result);
+//         connection.error_code = SOCKET_ERROR;
+//         connection.connection_successful = false;
+//         handle_error(connection.error_code);
+//         return connection;
+//     }
+
+//     int ok = connect(sock_fd, result->ai_addr, result->ai_addrlen);
+//     if (ok == -1) {
+//         close(sock_fd);
+//         freeaddrinfo(result);
+//         connection.error_code = CONNECT_ERROR;
+//         connection.connection_successful = false;
+//         handle_error(connection.error_code);
+//         return connection;
+//     }
+
+//     connection.socket_fd = sock_fd;
+//     connection.error_code = NO_ERROR;
+//     connection.connection_successful = true;
+
+//     freeaddrinfo(result);
+//     return connection;
+// }
+
+
 
 /**
  * Given commandline argc and argv, parses argv.
