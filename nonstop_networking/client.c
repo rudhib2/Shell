@@ -1,4 +1,4 @@
-//used chatGPT for debugging and initial structure
+//used chatGPT for debugging, initial structure, and for generating functions
 
 /**
  * nonstop_networking
@@ -72,18 +72,7 @@ struct addrinfo* getAddressInfo(const char *host, const char *port) {
     return result;
 }
 
-void read_response(char **arguments, int socket, verb operation) {
-    char expected_response[] = "OK\n";
-    size_t response_length = strlen(expected_response) + 1;
-    char *response_buffer = calloc(1, response_length);
 
-    if (strcmp(response_buffer, expected_response) == 0) {
-        handleSuccessResponse(operation, arguments, socket);
-    } else {
-        handleErrorResponse(socket);
-    }
-    free(response_buffer);
-}
 
 void handleGetOperation(char **arguments, int socket) {
     FILE *local_file = fopen(arguments[4], "a+");
@@ -91,7 +80,6 @@ void handleGetOperation(char **arguments, int socket) {
         perror(NULL);
         exit(1);
     }
-
     size_t file_size_received;
     read_from_socket(socket, (char *)&file_size_received, sizeof(size_t));
 
@@ -127,14 +115,16 @@ void handleListOperation(int socket) {
 }
 
 void handleErrorResponse(int socket) {
+    char *response_buffer = calloc(1,strlen("OK\n")+1);
+    size_t bytes_rd = read_from_socket(socket, response_buffer, strlen("OK\n"));
     char error_response[7] = "ERROR\n";
     size_t error_len = strlen(error_response);
-    char *response_buffer = realloc(NULL, error_len + 1);
-    read_from_socket(socket, response_buffer, error_len);
+    response_buffer = realloc(response_buffer, error_len + 1);
+    read_from_socket(socket, response_buffer + bytes_rd, error_len - bytes_rd);
 
     if (strcmp(response_buffer, error_response) == 0) {
         printf("Received error: %s", response_buffer);
-        char error_message[21] = {0};
+        char error_message[20] = {0};
         if (!read_from_socket(socket, error_message, 20)) {
             print_connection_closed();
         } else {
@@ -146,6 +136,19 @@ void handleErrorResponse(int socket) {
     free(response_buffer);
 }
 
+void read_response(char **arguments, int socket, verb operation) {
+    char expected_response[] = "OK\n";
+    size_t response_length = strlen(expected_response) + 1;
+    char *response_buffer = calloc(1, response_length);
+
+    if (strcmp(response_buffer, expected_response) == 0) {
+        fprintf(stdout, "%s", response_buffer);
+        handleSuccessResponse(operation, arguments, socket);
+    } else {
+        handleErrorResponse(socket);
+    }
+    free(response_buffer);
+}
 
 void handleSuccessResponse(verb operation, char **arguments, int socket) {
     if (operation == GET) {
