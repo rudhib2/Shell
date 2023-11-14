@@ -5,7 +5,13 @@
  * CS 341 - Fall 2023
  */
 #include "common.h"
-
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+// static const size_t MESSAGE_SIZE_DIGITS = 4;
 int print_any_err(size_t bytes_rd, size_t size) {
     int result = 0;
     switch (bytes_rd) {
@@ -30,36 +36,38 @@ int print_any_err(size_t bytes_rd, size_t size) {
 }
 
 ssize_t read_from_socket(int socket, char *buffer, size_t count) {
-    size_t total_bytes = 0;
-    while (total_bytes < count) {
-        ssize_t bytes_read = read(socket, buffer + total_bytes, count - total_bytes);
-
-        if (bytes_read <= 0) {
-            if (bytes_read == 0 && total_bytes == 0) {
-                print_connection_closed();
-            } else if (bytes_read != -1 && errno == EINTR) {
-                continue;
-            } else if (bytes_read == -1) {
-                perror("read_from_socket()");
+    size_t bytes_received = 0;
+    for (; bytes_received < count;) {
+        ssize_t ret = read(socket, buffer + bytes_received, count - bytes_received);
+        if (ret == 0) {
+            return bytes_received;  
+        } else if (ret > 0) {
+            bytes_received += ret;
+        } else if (ret == -1) {
+            if (errno == EINTR) {
+                continue;  
+            } else {
+                return -1;  
             }
-            break;
         }
-        total_bytes += bytes_read;
     }
-    return (total_bytes <= 0) ? -1 : total_bytes;
+    return bytes_received;
 }
 
+
 ssize_t write_to_socket(int socket, const char *buffer, size_t count) {
+    // Your Code Here
     size_t bytes_written = 0;
     while (bytes_written < count) {
         ssize_t ret = write(socket, buffer + bytes_written, count - bytes_written);
-        if (ret <= 0) {
-            if (ret == -1 && errno == EINTR) {
-                continue;  
+        if (ret < 0) {
+            if (errno == EINTR) {
+                continue; 
             } else {
-                perror("write_to_socket()");
-                return -1;
+                return -1; 
             }
+        } else if (ret == 0) {
+            return bytes_written; 
         }
         bytes_written += ret;
     }
