@@ -73,3 +73,27 @@ ssize_t write_to_socket(int socket, const char *buffer, size_t count) {
     }
     return bytes_written;
 }
+
+
+ssize_t read_header_from_socket(int socket, char *buffer, size_t count) {
+    size_t return_code = 0;
+
+    while (return_code < count) {
+
+        ssize_t read_code = read(socket, (void*) (buffer + return_code), 1);
+        if (read_code == -1 && errno == EINTR) {
+            continue;
+        }
+
+        if (read_code == 0 || buffer[strlen(buffer) - 1] == '\n') {
+            break;
+        }
+
+        if (read_code == -1) {
+            return 1;
+        }
+        return_code += read_code;
+    }
+
+    return return_code;
+}
