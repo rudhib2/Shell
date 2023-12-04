@@ -287,9 +287,9 @@ int delete1(ConnectState* connect, int client) {
 }
 
 int command1(ConnectState* connect, int client) {
-    // if (connect->command == GET && (get1(connect, client) != 0)) {
-    //     return 1;
-    // }
+    if (connect->command == GET && (get1(connect, client) != 0)) {
+        return 1;
+    }
     if (connect->command == DELETE) {
         if (delete1(connect, client) != 0) {
             return 1;
@@ -375,33 +375,78 @@ int put1(ConnectState* connect, int client) {
     return 0;
 }
 
+// int get1(ConnectState* connect, int client) {
+//     size_t l = strlen(temporary_directory) + 1 + strlen(connect->server_filename) + 1;
+//     char file_path[l];
+//     memset(file_path , 0, l);
+//     sprintf(file_path, "%s/%s", temporary_directory, connect->server_filename);
+//     FILE* filee = fopen(file_path, "rb");   
+//     if(!filee) {
+//         write_to_socket(client, err_no_such_file, strlen(err_no_such_file));
+//         perror("error");
+//         exit(1);
+//     }
+//     write_to_socket(client, "OK\n", 3);
+//     size_t size_of_file = *(size_t*)dictionary_get(filesizeofserver, connect->server_filename);
+//     write_to_socket(client, (char*)&size_of_file, sizeof(size_t));
+//     size_t count = 0;
+//     size_t head;
+//     while (count < size_of_file) {
+//         if ((size_of_file - count) <= 1024 ){
+//             head = size_of_file - count;
+//         } else {
+//              head = 1024;
+//         }
+//         char buffer[head + 1];
+//         fread(buffer, 1, head, filee);
+//         write_to_socket(client, buffer, head);
+//         count = count + head;
+//     }
+//     fclose(filee);
+//     return 0;
+// }
 int get1(ConnectState* connect, int client) {
     size_t l = strlen(temporary_directory) + 1 + strlen(connect->server_filename) + 1;
     char file_path[l];
     memset(file_path , 0, l);
     sprintf(file_path, "%s/%s", temporary_directory, connect->server_filename);
     FILE* filee = fopen(file_path, "rb");   
-    if(!filee) {
+    if (!filee) {
+        // If the file does not exist, send an error response and exit
         write_to_socket(client, err_no_such_file, strlen(err_no_such_file));
         perror("error");
-        exit(1);
+        return 1;
     }
+    // Send "OK\n" as an initial acknowledgment
     write_to_socket(client, "OK\n", 3);
+
+    // Get the size of the file from the dictionary
     size_t size_of_file = *(size_t*)dictionary_get(filesizeofserver, connect->server_filename);
+
+    // Send the size of the file to the client
     write_to_socket(client, (char*)&size_of_file, sizeof(size_t));
+    // Read and send the file data in chunks
     size_t count = 0;
-    size_t head;
+    size_t chunk_size;
     while (count < size_of_file) {
-        if ((size_of_file - count) <= 1024 ){
-            head = size_of_file - count;
+        // Determine the size of the next data chunk
+        if ((size_of_file - count) <= 1024) {
+            chunk_size = size_of_file - count;
         } else {
-             head = 1024;
+             chunk_size = 1024;
         }
-        char buffer[head + 1];
-        fread(buffer, 1, head, filee);
-        write_to_socket(client, buffer, head);
-        count = count + head;
+
+        // Read the data from the file
+        char buffer[chunk_size];
+        fread(buffer, 1, chunk_size, filee);
+
+        // Send the data chunk to the client
+        write_to_socket(client, buffer, chunk_size);
+
+        // Update the count of bytes sent
+        count = count + chunk_size;
     }
+    // Close the file
     fclose(filee);
     return 0;
 }
