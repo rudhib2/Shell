@@ -62,19 +62,55 @@ struct addrinfo* getAddressInfo(const char *host, const char *port) {
     return result;
 }
 
+// void handleGetOperation(char **arguments, int socket) {
+//     FILE *local_file = fopen(arguments[4], "wb");
+//     if (!local_file) {
+//         perror("Error opening local file");
+//         exit(1);
+//     }
+//     size_t file_size_received;
+//     if (read_from_socket(socket, (char *)&file_size_received, sizeof(size_t)) != sizeof(size_t)) {
+//         fprintf(stderr, "Error reading file size\n");
+//         fclose(local_file);
+//         exit(1);
+//     }
+//     fprintf(stderr, "Expecting file of size: %zu bytes\n", file_size_received);
+//     char data_chunk[1024];
+//     size_t total_bytes_read = 0;
+//     while (total_bytes_read < file_size_received) {
+//         size_t bytes_read = read_from_socket(socket, data_chunk, sizeof(data_chunk));
+//         if (bytes_read == 0) {
+//             fprintf(stderr, "Connection closed prematurely. Read %zu bytes, Total read so far: %zu\n", bytes_read, total_bytes_read);
+//             break;
+//         }
+//         fwrite(data_chunk, 1, bytes_read, local_file);
+//         total_bytes_read += bytes_read;
+//         fprintf(stderr, "Read %zu bytes, Total read so far: %zu\n", bytes_read, total_bytes_read);
+//     }
+//     fclose(local_file);
+//     // if (total_bytes_read != file_size_received) {
+//     //     fprintf(stderr, "Error: Total bytes read (%zu) do not match expected file size (%zu)\n", total_bytes_read, file_size_received);
+//     //     exit(1);
+//     // }
+//     if (print_any_err(total_bytes_read, file_size_received)) {
+//         exit(1);
+//     }
+//     fprintf(stderr, "File successfully received.\n");
+// }
+
 void handleGetOperation(char **arguments, int socket) {
-    FILE *local_file = fopen(arguments[4], "wb");
+   FILE *local_file = fopen(arguments[4], "wb");
     if (!local_file) {
         perror("Error opening local file");
         exit(1);
     }
     size_t file_size_received;
     if (read_from_socket(socket, (char *)&file_size_received, sizeof(size_t)) != sizeof(size_t)) {
-        fprintf(stderr, "Error reading file size\n");
+        fprintf(stderr, "Error reading file size in handleGetOperation\n");
         fclose(local_file);
         exit(1);
     }
-    fprintf(stderr, "Expecting file of size: %zu bytes\n", file_size_received);
+    fprintf(stderr, "Expecting file of size in handleGetOperation: %zu bytes\n", file_size_received);
     char data_chunk[1024];
     size_t total_bytes_read = 0;
     while (total_bytes_read < file_size_received) {
@@ -87,30 +123,44 @@ void handleGetOperation(char **arguments, int socket) {
         total_bytes_read += bytes_read;
         fprintf(stderr, "Read %zu bytes, Total read so far: %zu\n", bytes_read, total_bytes_read);
     }
-    fclose(local_file);
-    if (total_bytes_read != file_size_received) {
-        fprintf(stderr, "Error: Total bytes read (%zu) do not match expected file size (%zu)\n", total_bytes_read, file_size_received);
+
+   fclose(local_file);
+    if ((total_bytes_read != file_size_received) && (total_bytes_read != 0)) {
+        print_connection_closed();
         exit(1);
+    } else if(total_bytes_read < file_size_received) {
+        print_too_little_data();
+    } else if (total_bytes_read > file_size_received) {
+        print_received_too_much_data();
     }
+    // if (print_any_err(total_bytes_read, file_size_received)) {
+    //     exit(1);
+    // }
     fprintf(stderr, "File successfully received.\n");
 }
 
 
 void handleListOperation(int socket) {
     size_t size;
+    static size_t read_bytes;
     if (read_from_socket(socket, (char *)&size, sizeof(size_t)) != sizeof(size_t)) {
         print_connection_closed();
         exit(1);
     }
     char *data_buffer = calloc(1, size + 1); 
+    read_bytes = read_from_socket(socket, data_buffer, size + 5);
     if (!data_buffer) {
         perror("Memory allocation error");
         exit(1);
     }
-    if ((size_t)read_from_socket(socket, data_buffer, size) != size) {
+    if (read_bytes != size && (size_t)read_from_socket(socket, data_buffer, size) == 0) {
         print_connection_closed();
-        free(data_buffer);
+        // free(data_buffer);
         exit(1);
+    } else if (read_bytes < size) {
+        print_too_little_data();
+    } else if(read_bytes > size) {
+        print_received_too_much_data();
     }
     fprintf(stdout, "%s", data_buffer);
     free(data_buffer);
