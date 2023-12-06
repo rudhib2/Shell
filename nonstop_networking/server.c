@@ -3,12 +3,11 @@
 //  * CS 341 - Fall 2023
 //  */
 
-// used ChatGPT for initial desing and debugging - worked well
+// used ChatGPT for initial desing and debugging - worked well!
 #include "format.h"
 #include "common.h"
 #include "includes/dictionary.h"
 #include "includes/vector.h"
-
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +40,6 @@ int delete1(ConnectState* connect, int client);
 void monitoring_epoll(int fd);
 void setup_directory();
 
-
 static vector* serverfile;
 static char* p;
 static dictionary* filesizeofserver;
@@ -57,14 +55,14 @@ int main(int argc, char **argv) {
     act.sa_handler = SIG_IGN;
     act.sa_flags = SA_RESTART;
     if ( sigaction(SIGPIPE, &act, NULL)) {
-        perror("sigaction()");
+        perror("err");
         exit(1);
     }
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
     sa.sa_handler = server_closed;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-        perror("sigaction()");
+        perror("err");
         exit(1);
     }
     setup_directory();
@@ -174,7 +172,6 @@ void connection1() {
         exit(1);
     }
 }
-
 
 void epoll_setup() {
     fd_ = epoll_create(101);
@@ -412,41 +409,26 @@ int get1(ConnectState* connect, int client) {
     sprintf(file_path, "%s/%s", temporary_directory, connect->server_filename);
     FILE* filee = fopen(file_path, "rb");   
     if (!filee) {
-        // If the file does not exist, send an error response and exit
         write_to_socket(client, err_no_such_file, strlen(err_no_such_file));
         perror("error");
         return 1;
     }
-    // Send "OK\n" as an initial acknowledgment
     write_to_socket(client, "OK\n", 3);
-
-    // Get the size of the file from the dictionary
     size_t size_of_file = *(size_t*)dictionary_get(filesizeofserver, connect->server_filename);
-
-    // Send the size of the file to the client
     write_to_socket(client, (char*)&size_of_file, sizeof(size_t));
-    // Read and send the file data in chunks
     size_t count = 0;
     size_t chunk_size;
     while (count < size_of_file) {
-        // Determine the size of the next data chunk
         if ((size_of_file - count) <= 1024) {
             chunk_size = size_of_file - count;
         } else {
              chunk_size = 1024;
         }
-
-        // Read the data from the file
         char buffer[chunk_size];
         fread(buffer, 1, chunk_size, filee);
-
-        // Send the data chunk to the client
         write_to_socket(client, buffer, chunk_size);
-
-        // Update the count of bytes sent
         count = count + chunk_size;
     }
-    // Close the file
     fclose(filee);
     return 0;
 }
