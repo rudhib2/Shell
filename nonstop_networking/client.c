@@ -14,10 +14,10 @@
 char **parse_args(int argc, char **argv);
 verb check_args(char **my_args);
 int printing_errors(size_t read_bytes, size_t size);
-int connect_to_server(char* host, char* port);
-int execute_request(verb request);
-int write_client_request(verb request);
-int handle_put();
+int connection(char* host, char* port);
+int req(verb request);
+int cli_req(verb request);
+int putt();
 static char** my_args;
 static int sock_fd;
 #define OK "OK\n"
@@ -28,8 +28,8 @@ int main(int argc, char **argv) {
     if (check_args(my_args) == V_UNKNOWN) {
         exit(1);
     }
-    sock_fd = connect_to_server(my_args[0], my_args[1]);
-    if (sock_fd == 1 || write_client_request(check_args(my_args)) == 1 || execute_request(check_args(my_args)) == 1) {
+    sock_fd = connection(my_args[0], my_args[1]);
+    if (sock_fd == 1 || cli_req(check_args(my_args)) == 1 || req(check_args(my_args)) == 1) {
         exit(1);
     }
     shutdown(sock_fd, SHUT_RD);
@@ -38,26 +38,26 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-int connect_to_server(char *host, char *port) {
-    struct addrinfo hints = {0}, *result = NULL;
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    if (getaddrinfo(host, port, &hints, &result) != 0) {
+int connection(char *host, char *port) {
+    struct addrinfo h = {0}, *result = NULL;
+    h.ai_family = AF_INET;
+    h.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(host, port, &h, &result) != 0) {
         perror("err");
         return 1;
     }
-    int sock_fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (sock_fd == -1 || connect(sock_fd, result->ai_addr, result->ai_addrlen) == -1) {
+    int fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (fd == -1 || connect(fd, result->ai_addr, result->ai_addrlen) == -1) {
         perror("err");
-        close(sock_fd);
+        close(fd);
         freeaddrinfo(result);
         return 1;
     }
     freeaddrinfo(result);
-    return sock_fd;
+    return fd;
 }
 
-int write_client_request(verb request) {
+int cli_req(verb request) {
     char* s = NULL;
     if (request == LIST) {
         s = malloc(strlen(my_args[2]) + 2);
@@ -70,12 +70,12 @@ int write_client_request(verb request) {
         perror("err");
         return 1;
     }
-    ssize_t write_count = write_to_socket(sock_fd, s, strlen(s));
-    if (write_count < 0) {
+    ssize_t wcount = write_to_socket(sock_fd, s, strlen(s));
+    if (wcount < 0) {
         perror("err");
         return 1;
     }
-    if ((size_t)write_count < strlen(s)) {
+    if ((size_t)wcount < strlen(s)) {
         print_connection_closed();
         return 1;
     }
@@ -97,9 +97,9 @@ int printing_errors(size_t read_bytes, size_t size) {
     return 0;
 }
 
-int execute_request(verb request) {
+int req(verb request) {
     if (request == PUT) {
-        if (handle_put() != 0) {
+        if (putt() != 0) {
             return 1;
         }
     }
@@ -112,16 +112,16 @@ int execute_request(verb request) {
         perror("err");
         return 1;
     }
-    size_t read_bytes = read_from_socket(sock_fd, buffer, strlen(OK));
+    size_t b = read_from_socket(sock_fd, buffer, strlen(OK));
     if (strcmp(buffer, OK) != 0) {
-        char* new_buffer = realloc(buffer, strlen(ERROR) + 1);
-        if (!new_buffer) {
+        char* buff = realloc(buffer, strlen(ERROR) + 1);
+        if (!buff) {
             perror("err");
             free(buffer);
             return 1;
         }
-        read_from_socket(sock_fd, new_buffer + read_bytes, strlen(ERROR) - read_bytes);
-        if (strcmp(new_buffer, ERROR) == 0) {
+        read_from_socket(sock_fd, buff + b, strlen(ERROR) - b);
+        if (strcmp(buff, ERROR) == 0) {
             char err[24] = {0};
             if (read_from_socket(sock_fd, err, 24) == 0) {
                 print_connection_closed();
@@ -130,8 +130,7 @@ int execute_request(verb request) {
         } else {
             print_invalid_response();
         }
-
-        free(new_buffer);
+        free(buff);
         return 1;
     }
     if (request == LIST) {
@@ -139,46 +138,44 @@ int execute_request(verb request) {
         read_from_socket(sock_fd, (char*)&size, sizeof(size_t));
         char list_buffer[size + 6];
         memset(list_buffer, 0, size + 6);
-        read_bytes = read_from_socket(sock_fd, list_buffer, size + 5);
-
-        if (printing_errors(read_bytes, size) == 0) {
+        b = read_from_socket(sock_fd, list_buffer, size + 5);
+        if (printing_errors(b, size) == 0) {
             fprintf(stdout, "%s\n", list_buffer);
         } else {
             free(buffer);
             return 1;
         }
     } else if (request == GET) {
-        FILE *local_file = fopen(my_args[4], "a+");
-        if (!local_file) {
+        FILE *filee = fopen(my_args[4], "a+");
+        if (!filee) {
             perror("err");
             free(buffer);
             return 1;
         }
-        size_t buff_size;
-        read_from_socket(sock_fd, (char *)&buff_size, sizeof(size_t));
+        size_t b_size;
+        read_from_socket(sock_fd, (char *)&b_size, sizeof(size_t));
         size_t read_bytes = 0;
         size_t r_size;
-        while (read_bytes < buff_size + 4) {
-            if ((buff_size + 4 - read_bytes) > 1024){
+        while (read_bytes < b_size + 4) {
+            if ((b_size + 4 - read_bytes) > 1024){
                 r_size = 1024;
             } else {
-                r_size = buff_size + 4 - read_bytes;
+                r_size = b_size + 4 - read_bytes;
             }
             char get_buffer[1025] = {0};
-            size_t read_count = read_from_socket(sock_fd, get_buffer, r_size);
-            fwrite(get_buffer, 1, read_count, local_file);
-            read_bytes = read_bytes + read_count;
-
-            if (read_count == 0) {
+            size_t r_count = read_from_socket(sock_fd, get_buffer, r_size);
+            fwrite(get_buffer, 1, r_count, filee);
+            read_bytes = read_bytes + r_count;
+            if (r_count == 0) {
                 break;
             }
         }
-        if (printing_errors(read_bytes, buff_size) != 0) {
-            fclose(local_file);
+        if (printing_errors(read_bytes, b_size) != 0) {
+            fclose(filee);
             free(buffer);
             return 1;
         }
-        fclose(local_file);
+        fclose(filee);
     } else if (request == PUT || request == DELETE) {
         print_success();
     }
@@ -186,36 +183,36 @@ int execute_request(verb request) {
     return 0;
 }
 
-int handle_put() {
+int putt() {
     struct stat statbuf;
     if (stat(my_args[4], &statbuf) == -1) {
         perror("err");
         return 1;
     }
-    size_t stat_size = statbuf.st_size;
-    if (write_to_socket(sock_fd, (char*)&stat_size, sizeof(size_t)) < 0) {
+    size_t s = statbuf.st_size;
+    if (write_to_socket(sock_fd, (char*)&s, sizeof(size_t)) < 0) {
         perror("err");
         return 1;
     }
-    FILE* local_file = fopen(my_args[4], "rb");
-    if (!local_file) {
+    FILE* filee = fopen(my_args[4], "rb");
+    if (!filee) {
         perror("err");
         return 1;
     }
     size_t w_total = 0;
     char buffer[1025] = {0};
-    ssize_t read_count;
-    while ((read_count = fread(buffer, 1, sizeof(buffer) - 1, local_file)) > 0) {
-        ssize_t write_count = write_to_socket(sock_fd, buffer, read_count);
-        if (write_count < read_count) {
+    ssize_t r_count;
+    while ((r_count = fread(buffer, 1, sizeof(buffer) - 1, filee)) > 0) {
+        ssize_t w_count = write_to_socket(sock_fd, buffer, r_count);
+        if (w_count < r_count) {
             print_connection_closed();
-            fclose(local_file);
+            fclose(filee);
             return 1;
         }
-        w_total += write_count;
+        w_total += w_count;
     }
-    fclose(local_file);
-    if (w_total < stat_size) {
+    fclose(filee);
+    if (w_total < s) {
         print_connection_closed();
         return 1;
     }
